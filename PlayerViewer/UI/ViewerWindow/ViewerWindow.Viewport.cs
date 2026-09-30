@@ -144,7 +144,7 @@ namespace PlayerViewer.UI
             }
 
             bool brushWheel = _pipeline.LimbPaint != null && io.KeyShift;
-            if (_viewportHovered && Focused && io.MouseWheel != 0 && !brushWheel)
+            if (_viewportHovered && CafeStudio.UI.ImGuiController.ApplicationHasFocus && io.MouseWheel != 0 && !brushWheel)
             {
                 cam.TargetDistance = Math.Max(
                     0.05f,
@@ -154,7 +154,7 @@ namespace PlayerViewer.UI
             }
 
             //WASD pans in camera space (W/S = forward/back, A/D = left/right).
-            if (!io.WantTextInput && Focused)
+            if (!io.WantTextInput && CafeStudio.UI.ImGuiController.ApplicationHasFocus)
             {
                 var kb = Keyboard.GetState();
                 float move = cam.TargetDistance * io.DeltaTime;

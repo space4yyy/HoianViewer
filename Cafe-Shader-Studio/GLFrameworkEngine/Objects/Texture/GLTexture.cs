@@ -161,6 +161,12 @@ namespace GLFrameworkEngine
                 bool loadAsBitmap = !IsPower2(width, height) && texture.IsBCNCompressed() && false;
                 if (texture.IsASTC() || parameters.FlipY)
                     loadAsBitmap = true;
+                //BC6/BC7 (BPTC) are unavailable in macOS OpenGL. Decode these
+                //formats on the CPU rather than uploading an unsupported image.
+                if (OperatingSystem.IsMacOS() && (format == TexFormat.BC7_UNORM
+                    || format == TexFormat.BC7_SRGB || format == TexFormat.BC6H_UF16
+                    || format == TexFormat.BC6H_SF16))
+                    loadAsBitmap = true;
 
                 //Upload the file's real mip chain for BC compressed 2D textures.
                 //GL.GenerateMipmap on compressed formats is extremely slow in drivers

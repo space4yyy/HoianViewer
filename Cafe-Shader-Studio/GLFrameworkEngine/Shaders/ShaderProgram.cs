@@ -228,6 +228,9 @@ namespace GLFrameworkEngine
         public void Link()
         {
             GL.LinkProgram(program);
+            string linkLog = GL.GetProgramInfoLog(program);
+            if (!string.IsNullOrWhiteSpace(linkLog))
+                Console.WriteLine($"[GL] Program link:\n{linkLog}");
             _intValues.Clear();
         }
 
@@ -428,6 +431,9 @@ namespace GLFrameworkEngine
             //Hint that the binary may be fetched for disk caching.
             try { GL.ProgramParameter(program, ProgramParameterName.ProgramBinaryRetrievableHint, 1); } catch { }
             GL.LinkProgram(program);
+            string linkLog = GL.GetProgramInfoLog(program);
+            if (!string.IsNullOrWhiteSpace(linkLog))
+                Console.WriteLine($"[GL] Program link:\n{linkLog}");
             foreach (var shader in shaders)
             {
                 string log = GL.GetShaderInfoLog(shader.id);

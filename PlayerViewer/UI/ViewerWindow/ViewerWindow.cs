@@ -468,6 +468,12 @@ namespace PlayerViewer.UI
             {
                 _config.WindowWidth = Width;
                 _config.WindowHeight = NativeClientHeight;
+                if (OperatingSystem.IsMacOS())
+                {
+                    var points = ImGui.GetIO().DisplaySize;
+                    _config.WindowWidth = (int)points.X;
+                    _config.WindowHeight = (int)points.Y;
+                }
             }
             _config.Save();
             //Save only marks the config dirty; write it out before the process goes away.

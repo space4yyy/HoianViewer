@@ -24,6 +24,24 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 Move the whole `publish` folder, not just the exe: `Shaders/`, `Resources/`, `Plugins/` and
 `Lib/` are read from disk beside it at runtime.
 
+For Apple Silicon macOS, install .NET 10 and the SDL runtime, then publish:
+
+```
+brew install dotnet@10 sdl2-compat sdl3
+dotnet publish PlayerViewer/PlayerViewer.csproj -c Release -r osx-arm64 --self-contained true -p:PublishSingleFile=true -o publish/osx-arm64
+./publish/osx-arm64/PlayerViewer
+```
+
+The macOS arm64 build copies the matching cimgui and tinyfiledialogs libraries from
+`tools/macos-arm64/` and the SDL libraries from Homebrew. Use `-p:MacSdl2Path=...`
+and `-p:MacSdl3Path=...` if those libraries are elsewhere. Keep the entire publish
+folder together. The arm64 shader specialiser is included under
+`tools/uberslicer/osx-arm64/` and copied beside the viewer. Rebuild it from source
+with `sh tools/uberslicer/build-macos.sh` (requires Xcode Command Line Tools).
+On macOS, the UI uses logical window points for Retina scaling and mouse input;
+translated game shaders are adapted to GLSL 4.10, and unsupported BC6/BC7 textures
+use CPU decoding.
+
 
 `dotnet tool restore` is needed if you want to run csharpier for formatting.
 

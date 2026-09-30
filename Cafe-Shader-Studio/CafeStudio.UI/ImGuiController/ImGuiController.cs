@@ -5,6 +5,7 @@ using OpenTK.Input;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace CafeStudio.UI
 {
@@ -78,6 +79,13 @@ namespace CafeStudio.UI
         /// </summary>
         public void RebuildFonts()
         {
+            //The constructor starts a frame. A romfs loaded on the first render can
+            //replace its fonts before Update has had a chance to end that frame.
+            if (_frameBegun)
+            {
+                ImGui.EndFrame();
+                _frameBegun = false;
+            }
             var io = ImGui.GetIO();
             io.Fonts.Clear();
             AddFonts(io);
@@ -262,7 +270,8 @@ void main()
                 ImGui.Render();
             }
 
-            ApplicationHasFocus = wnd.Focused;
+            UpdateMacDisplay(wnd);
+            ApplicationHasFocus = _macSdl ? _macFocused : wnd.Focused;
 
             SetPerFrameImGuiData(deltaSeconds);
             UpdateImGuiInput(wnd);
@@ -284,6 +293,57 @@ void main()
                 _windowHeight / _scaleFactor.Y);
             io.DisplayFramebufferScale = _scaleFactor;
             io.DeltaTime = deltaSeconds; // DeltaTime is in seconds.
+        }
+
+        //OpenTK 3's SDL backend reports drawable pixels for ClientSize, but scales
+        //global mouse coordinates before subtracting an unscaled window origin.
+        //Keep ImGui in window points and query SDL's local mouse position directly.
+        bool _macSdl;
+        bool _macFocused;
+        GameWindow _mouseWindow;
+        readonly bool[] _mousePressed = new bool[3];
+        [DllImport("SDL2.dll", CallingConvention = CallingConvention.Cdecl)]
+        static extern void SDL_GetWindowSize(IntPtr window, out int width, out int height);
+        [DllImport("SDL2.dll", CallingConvention = CallingConvention.Cdecl)]
+        static extern void SDL_GL_GetDrawableSize(IntPtr window, out int width, out int height);
+        [DllImport("SDL2.dll", CallingConvention = CallingConvention.Cdecl)]
+        static extern uint SDL_GetMouseState(out int x, out int y);
+        [DllImport("SDL2.dll", CallingConvention = CallingConvention.Cdecl)]
+        static extern IntPtr SDL_GetKeyboardFocus();
+        [DllImport("SDL2.dll", CallingConvention = CallingConvention.Cdecl)]
+        static extern IntPtr SDL_GetMouseFocus();
+
+        void UpdateMacDisplay(GameWindow window)
+        {
+            _macSdl = OperatingSystem.IsMacOS()
+                && window.WindowInfo.GetType().Name == "Sdl2WindowInfo";
+            if (!_macSdl)
+                return;
+            var keyboardFocus = SDL_GetKeyboardFocus();
+            _macFocused = keyboardFocus == window.WindowInfo.Handle
+                || (keyboardFocus == IntPtr.Zero && SDL_GetMouseFocus() == window.WindowInfo.Handle);
+            if (_mouseWindow != window)
+            {
+                _mouseWindow = window;
+                window.MouseDown += (_, e) =>
+                {
+                    int index = e.Button == MouseButton.Left ? 0
+                        : e.Button == MouseButton.Right ? 1
+                        : e.Button == MouseButton.Middle ? 2 : -1;
+                    if (index >= 0)
+                        _mousePressed[index] = true;
+                };
+            }
+            SDL_GetWindowSize(window.WindowInfo.Handle, out int width, out int height);
+            SDL_GL_GetDrawableSize(window.WindowInfo.Handle, out int pixelsX, out int pixelsY);
+            if (width <= 0 || height <= 0 || pixelsX <= 0 || pixelsY <= 0)
+                return;
+            _windowWidth = pixelsX;
+            _windowHeight = pixelsY;
+            var scale = new System.Numerics.Vector2((float)pixelsX / width, (float)pixelsY / height);
+            if (scale != _scaleFactor)
+                Console.WriteLine($"[UI] Window {width}x{height}, drawable {pixelsX}x{pixelsY}, scale {scale}");
+            _scaleFactor = scale;
         }
 
         System.Numerics.Vector2 _wheel, _scrollTotal;
@@ -320,7 +380,7 @@ void main()
         {
             ImGuiIOPtr io = ImGui.GetIO();
 
-            if (!wnd.Focused)
+            if (!ApplicationHasFocus)
             {
                 _wheel = default;
                 io.MouseWheel = 0;
@@ -347,6 +407,19 @@ void main()
             var screenPoint = new System.Drawing.Point(MouseState.X, MouseState.Y);
             var point = wnd.PointToClient(screenPoint);
             io.MousePos = new System.Numerics.Vector2(point.X, point.Y);
+            if (_macSdl)
+            {
+                uint buttons = SDL_GetMouseState(out int x, out int y);
+                io.MousePos = new System.Numerics.Vector2(x, y);
+                io.MouseDown[0] = (buttons & 1) != 0;
+                io.MouseDown[1] = (buttons & 4) != 0;
+                io.MouseDown[2] = (buttons & 2) != 0;
+                for (int i = 0; i < _mousePressed.Length; i++)
+                {
+                    io.MouseDown[i] = io.MouseDown[i] || _mousePressed[i];
+                    _mousePressed[i] = false;
+                }
+            }
 
             io.MouseWheel = _wheel.Y;
             io.MouseWheelH = _wheel.X;

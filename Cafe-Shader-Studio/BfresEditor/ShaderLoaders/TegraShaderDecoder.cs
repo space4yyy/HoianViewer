@@ -317,6 +317,8 @@ namespace BfresEditor
             bool hasPatch = yFlipSamplers != null && yFlipSamplers.Count > 0;
             string programKey = $"{vertHash}_{fragHash}";
             string key = hasPatch ? programKey + "_fbpatch" : programKey;
+            if (OperatingSystem.IsMacOS())
+                key += "_mac410_v2";
 
             string vertPath = Path.Combine(CacheDir, $"{programKey}.vert");
             string fragPath = Path.Combine(CacheDir, $"{fragHash}.frag");
@@ -360,6 +362,23 @@ namespace BfresEditor
                 string fragSource = freshFrag ?? File.ReadAllText(fragPath);
                 string vertSource = freshVert ?? File.ReadAllText(vertPath);
 
+                if (OperatingSystem.IsMacOS())
+                {
+                    fragSource = MacCompatibleSource(fragSource, fragment: true);
+                    vertSource = MacCompatibleSource(vertSource);
+                    for (int i = 0; i < shaderModel.Attributes.Count; i++)
+                    {
+                        string name = shaderModel.Attributes.GetKey(i).TrimStart('_');
+                        if (name != "i0" && name != "i1")
+                            continue;
+                        int location = shaderModel.Attributes[i].Location;
+                        //The mesh binds bone indices with VertexAttribIPointer.
+                        //A float input for integer storage is undefined on Apple.
+                        vertSource = vertSource.Replace($"in vec4 in_attr{location};",
+                            $"in ivec4 pv_int_attr{location};\n#define in_attr{location} intBitsToFloat(pv_int_attr{location})");
+                    }
+                }
+
                 if (hasPatch)
                 {
                     fragSource = PatchFramebufferSamplers(fragSource, yFlipSamplers);
@@ -400,6 +419,22 @@ namespace BfresEditor
             };
             _shaderInfoCache[key] = result;
             return result;
+        }
+
+        //macOS exposes GLSL 4.10. The translated game shaders use 4.50 headers
+        //and explicit UBO bindings, although our renderer binds every block by name.
+        //Adapt at compile time so existing shader caches work as well.
+        static string MacCompatibleSource(string source, bool fragment = false)
+        {
+            source = source.Replace("#version 450 core", "#version 410 core");
+            source = System.Text.RegularExpressions.Regex.Replace(source,
+                @"^#extension .*\r?\n", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+            source = System.Text.RegularExpressions.Regex.Replace(source,
+                @"binding\s*=\s*\d+\s*,\s*", "");
+            //Apple links stage interfaces by name even when both carry a location.
+            source = System.Text.RegularExpressions.Regex.Replace(source,
+                fragment ? @"\bin_attr(\d+)\b" : @"\bout_attr(\d+)\b", "pv_varying$1");
+            return source;
         }
 
         static ShaderProgram TryLoadProgramBinary(string path)

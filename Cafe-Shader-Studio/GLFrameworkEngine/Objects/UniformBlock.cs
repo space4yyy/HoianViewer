@@ -151,6 +151,7 @@ namespace GLFrameworkEngine
         //GL.GetUniformBlockIndex blocks on the driver thread, so cache the result
         //per program/name; it is called for every block of every mesh each frame.
         static readonly Dictionary<(int, string), int> _blockIndexCache = new Dictionary<(int, string), int>();
+        static readonly Dictionary<(int, int), int> _blockSizeCache = new Dictionary<(int, int), int>();
 
         //The binding each program's block was last given; it is program state, so it only
         //needs setting when it changes.
@@ -164,6 +165,8 @@ namespace GLFrameworkEngine
                     _blockIndexCache.Remove(key);
                 foreach (var key in _bindingCache.Keys.Where(k => k.Item1 == program).ToList())
                     _bindingCache.Remove(key);
+                foreach (var key in _blockSizeCache.Keys.Where(k => k.Item1 == program).ToList())
+                    _blockSizeCache.Remove(key);
             };
         }
 
@@ -189,6 +192,19 @@ namespace GLFrameworkEngine
             var index = GetBlockIndex(programID, name);
             if (index != -1)
             {
+                //Apple's driver requires storage for the whole declared block,
+                //including the translator's unused constant-buffer array tail.
+                if (OperatingSystem.IsMacOS())
+                {
+                    if (!_blockSizeCache.TryGetValue((programID, index), out int requiredSize))
+                    {
+                        GL.GetActiveUniformBlock(programID, index,
+                            ActiveUniformBlockParameter.UniformBlockDataSize, out requiredSize);
+                        _blockSizeCache[(programID, index)] = requiredSize;
+                    }
+                    if (Buffer.Count < requiredSize)
+                        AddZeros(requiredSize - Buffer.Count);
+                }
                 binding = binding != -1 ? binding : index;
                 if (!_bindingCache.TryGetValue((programID, index), out int set) || set != binding)
                 {

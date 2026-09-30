@@ -41,6 +41,11 @@
     <ShipOsxNatives Condition="$(RuntimeIdentifier.StartsWith('osx'))">true</ShipOsxNatives>
     <TargetsWindows Condition="$(RuntimeIdentifier.StartsWith('win'))">true</TargetsWindows>
   </PropertyGroup>
+  <PropertyGroup>
+    <MacArmNativeDir Condition="'$(MacArmNativeDir)' == ''">$(MSBuildThisFileDirectory)..\tools\macos-arm64\</MacArmNativeDir>
+    <MacSdl2Path Condition="'$(MacSdl2Path)' == ''">/opt/homebrew/lib/libSDL2.dylib</MacSdl2Path>
+    <MacSdl3Path Condition="'$(MacSdl3Path)' == ''">/opt/homebrew/lib/libSDL3.dylib</MacSdl3Path>
+  </PropertyGroup>
 
   <!-- Opt-in automatic Tracy profiling: build with `-p:Tracy=true`. Compiles the runtime shim
        into this assembly (and pulls Tracy-CSharp so TracyClient.so ships), then a post-build step
@@ -136,7 +141,13 @@
       Include="$(CssRoot)\CafeShaderStudio\cimgui.dylib"
       Link="cimgui.dylib"
       CopyToOutputDirectory="PreserveNewest"
-      Condition="'$(ShipOsxNatives)' == 'true' And Exists('$(CssRoot)\CafeShaderStudio\cimgui.dylib')"
+      Condition="'$(ShipOsxNatives)' == 'true' And '$(RuntimeIdentifier)' != 'osx-arm64' And Exists('$(CssRoot)\CafeShaderStudio\cimgui.dylib')"
+    />
+    <Content
+      Include="$(MacArmNativeDir)cimgui.dylib"
+      Link="cimgui.dylib"
+      CopyToOutputDirectory="PreserveNewest"
+      Condition="'$(RuntimeIdentifier)' == 'osx-arm64'"
     />
     <!-- Native file dialogs (tinyfiledialogs.dll is the x64 build). -->
     <Content
@@ -155,7 +166,13 @@
       Include="$(CssRoot)\CafeShaderStudio\tinyfiledialogs.dylib"
       Link="tinyfiledialogs.dylib"
       CopyToOutputDirectory="PreserveNewest"
-      Condition="'$(ShipOsxNatives)' == 'true' And Exists('$(CssRoot)\CafeShaderStudio\tinyfiledialogs.dylib')"
+      Condition="'$(ShipOsxNatives)' == 'true' And '$(RuntimeIdentifier)' != 'osx-arm64' And Exists('$(CssRoot)\CafeShaderStudio\tinyfiledialogs.dylib')"
+    />
+    <Content
+      Include="$(MacArmNativeDir)tinyfiledialogs.dylib"
+      Link="tinyfiledialogs.dylib"
+      CopyToOutputDirectory="PreserveNewest"
+      Condition="'$(RuntimeIdentifier)' == 'osx-arm64'"
     />
   </ItemGroup>
 
@@ -192,7 +209,13 @@
       SkipUnchangedFiles="true"
     />
     <Copy
-      Condition="'$(ShipOsxNatives)' == 'true' And Exists('$(CssRoot)\CafeShaderStudio\cimgui.dylib')"
+      Condition="'$(RuntimeIdentifier)' == 'osx-arm64'"
+      SourceFiles="$(MacArmNativeDir)cimgui.dylib"
+      DestinationFiles="$(OutDir)libcimgui.dylib"
+      SkipUnchangedFiles="true"
+    />
+    <Copy
+      Condition="'$(ShipOsxNatives)' == 'true' And '$(RuntimeIdentifier)' != 'osx-arm64' And Exists('$(CssRoot)\CafeShaderStudio\cimgui.dylib')"
       SourceFiles="$(CssRoot)\CafeShaderStudio\cimgui.dylib"
       DestinationFiles="$(OutDir)libcimgui.dylib"
       SkipUnchangedFiles="true"
@@ -206,11 +229,35 @@
       SkipUnchangedFiles="true"
     />
     <Copy
-      Condition="'$(ShipOsxNatives)' == 'true' And Exists('$(CssRoot)\CafeShaderStudio\cimgui.dylib')"
+      Condition="'$(RuntimeIdentifier)' == 'osx-arm64'"
+      SourceFiles="$(MacArmNativeDir)cimgui.dylib"
+      DestinationFiles="$(PublishDir)libcimgui.dylib"
+      SkipUnchangedFiles="true"
+    />
+    <Copy
+      Condition="'$(ShipOsxNatives)' == 'true' And '$(RuntimeIdentifier)' != 'osx-arm64' And Exists('$(CssRoot)\CafeShaderStudio\cimgui.dylib')"
       SourceFiles="$(CssRoot)\CafeShaderStudio\cimgui.dylib"
       DestinationFiles="$(PublishDir)libcimgui.dylib"
       SkipUnchangedFiles="true"
     />
+  </Target>
+
+  <!-- OpenTK 3 probes SDL2.dll on macOS. SDL2-compat needs SDL3 alongside it; without them
+       OpenTK falls back to its Cocoa backend, which crashes on Apple Silicon. -->
+  <Target Name="CopyMacArmLibrariesBuild" AfterTargets="Build" Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">
+    <Copy SourceFiles="$(MacSdl2Path)" DestinationFiles="$(OutDir)SDL2.dll" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" Condition="Exists('$(MacSdl2Path)')" />
+    <Copy SourceFiles="$(MacSdl3Path)" DestinationFiles="$(OutDir)libSDL3.dylib" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" Condition="Exists('$(MacSdl3Path)')" />
+    <Warning Condition="!Exists('$(MacSdl2Path)') Or !Exists('$(MacSdl3Path)')" Text="macOS arm64 startup requires SDL2-compat and SDL3. Install them or set MacSdl2Path and MacSdl3Path." />
+  </Target>
+  <Target Name="CopyMacArmLibrariesPublish" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">
+    <ItemGroup>
+      <MacArmLicense Include="$(MacArmNativeDir)LICENSE.*" />
+    </ItemGroup>
+    <Copy SourceFiles="$(MacArmNativeDir)cimgui.dylib" DestinationFiles="$(PublishDir)cimgui.dylib" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MacArmNativeDir)tinyfiledialogs.dylib" DestinationFiles="$(PublishDir)tinyfiledialogs.dylib" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MacSdl2Path)" DestinationFiles="$(PublishDir)SDL2.dll" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" Condition="Exists('$(MacSdl2Path)')" />
+    <Copy SourceFiles="$(MacSdl3Path)" DestinationFiles="$(PublishDir)libSDL3.dylib" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" Condition="Exists('$(MacSdl3Path)')" />
+    <Copy SourceFiles="@(MacArmLicense)" DestinationFiles="@(MacArmLicense->'$(PublishDir)Licenses/%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 
   <!-- The shipped product is two executables: the viewer, and the native shader specialiser it
@@ -225,6 +272,8 @@
       >$(MSBuildThisFileDirectory)..\tools\uberslicer\</UberSlicerDir>
   </PropertyGroup>
   <Target Name="CopyUberSlicer" AfterTargets="Build">
+    <Copy Condition="'$(RuntimeIdentifier)' == 'osx-arm64' And Exists('$(UberSlicerDir)osx-arm64/uberspec')"
+      SourceFiles="$(UberSlicerDir)osx-arm64/uberspec" DestinationFiles="$(OutDir)uberslicer" SkipUnchangedFiles="true" />
     <Copy
       Condition="'$(ShipWindowsNatives)' == 'true' And Exists('$(UberSlicerDir)win-x64\uberspec.exe')"
       SourceFiles="$(UberSlicerDir)win-x64\uberspec.exe"
@@ -250,6 +299,8 @@
   <!-- Runs after bundling. The single file bundler swallows what it classifies as a native
        binary, so an exe that has to sit loose beside the published one cannot be Content. -->
   <Target Name="CopyUberSlicerPublish" AfterTargets="Publish">
+    <Copy Condition="'$(RuntimeIdentifier)' == 'osx-arm64' And Exists('$(UberSlicerDir)osx-arm64/uberspec')"
+      SourceFiles="$(UberSlicerDir)osx-arm64/uberspec" DestinationFiles="$(PublishDir)uberslicer" SkipUnchangedFiles="true" />
     <Copy
       Condition="'$(ShipWindowsNatives)' == 'true' And Exists('$(UberSlicerDir)win-x64\uberspec.exe')"
       SourceFiles="$(UberSlicerDir)win-x64\uberspec.exe"
