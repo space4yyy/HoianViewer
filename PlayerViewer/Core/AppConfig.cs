@@ -220,6 +220,9 @@ namespace PlayerViewer.Core
         //framed subject still exports sharp. VRAM and temp-disk use scale with the square.
         public int ExportSupersample = 1;
 
+        //Preview-only sampling. Apple's OpenGL path benefits from a lighter default.
+        public int PreviewSupersample = OperatingSystem.IsMacOS() ? 1 : 2;
+
         //Physics warm-up: plays the animation (/ first animation in the sequence) through
         //this many extra times before recording starts without capturing. Physics reset
         //whenever an animation loads, so frame 0 has a twitch each time the exported
@@ -308,6 +311,7 @@ namespace PlayerViewer.Core
                 WindowHeight = 900;
             //Multiplies the render target, so a hand-edited value has to stay in range.
             ExportSupersample = System.Math.Clamp(ExportSupersample, 1, 8);
+            PreviewSupersample = System.Math.Clamp(PreviewSupersample, 1, 2);
             if (string.IsNullOrWhiteSpace(Language))
                 Language = Localization.DefaultLanguage;
             UiMode = Mode.ToString();

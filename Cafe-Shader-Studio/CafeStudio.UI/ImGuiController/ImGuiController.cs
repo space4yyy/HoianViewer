@@ -390,8 +390,6 @@ void main()
                 return;
             }
 
-            MouseState MouseState = Mouse.GetCursorState();
-
             bool discard = DiscardPendingInput;
             if (discard)
             {
@@ -400,13 +398,6 @@ void main()
                 PressedChars.Clear();
             }
 
-            io.MouseDown[0] = MouseState.LeftButton == ButtonState.Pressed;
-            io.MouseDown[1] = MouseState.RightButton == ButtonState.Pressed;
-            io.MouseDown[2] = MouseState.MiddleButton == ButtonState.Pressed;
-
-            var screenPoint = new System.Drawing.Point(MouseState.X, MouseState.Y);
-            var point = wnd.PointToClient(screenPoint);
-            io.MousePos = new System.Numerics.Vector2(point.X, point.Y);
             if (_macSdl)
             {
                 uint buttons = SDL_GetMouseState(out int x, out int y);
@@ -419,6 +410,17 @@ void main()
                     io.MouseDown[i] = io.MouseDown[i] || _mousePressed[i];
                     _mousePressed[i] = false;
                 }
+            }
+
+            else
+            {
+                MouseState MouseState = Mouse.GetCursorState();
+                io.MouseDown[0] = MouseState.LeftButton == ButtonState.Pressed;
+                io.MouseDown[1] = MouseState.RightButton == ButtonState.Pressed;
+                io.MouseDown[2] = MouseState.MiddleButton == ButtonState.Pressed;
+                var screenPoint = new System.Drawing.Point(MouseState.X, MouseState.Y);
+                var point = wnd.PointToClient(screenPoint);
+                io.MousePos = new System.Numerics.Vector2(point.X, point.Y);
             }
 
             io.MouseWheel = _wheel.Y;
@@ -488,6 +490,24 @@ void main()
         /// take the default's vertex inputs and its projection_matrix uniform.
         /// </summary>
         public static readonly Dictionary<IntPtr, int> TexturePrograms = new Dictionary<IntPtr, int>();
+        static readonly Dictionary<int, int> TextureProjectionLocations = new Dictionary<int, int>();
+        readonly HashSet<int> _projectedPrograms = new HashSet<int>();
+
+        static ImGuiController()
+        {
+            GLFrameworkEngine.ShaderProgram.Deleting += InvalidateTextureProgram;
+        }
+
+        /// <summary>Registers a linked custom program, including when GL reuses a deleted ID.</summary>
+        public static void RegisterTextureProgram(IntPtr texture, int program)
+        {
+            TexturePrograms[texture] = program;
+            InvalidateTextureProgram(program);
+        }
+
+        /// <summary>Call after relinking or before directly deleting a custom GL program.</summary>
+        public static void InvalidateTextureProgram(int program) => TextureProjectionLocations.Remove(program);
+
 
         private void RenderImDrawData(ImDrawDataPtr draw_data)
         {
@@ -535,6 +555,8 @@ void main()
                 -1.0f,
                 1.0f);
 
+            _projectedPrograms.Clear();
+            _projectedPrograms.Add(_shader.Program);
             _shader.UseShader();
             GL.UniformMatrix4(_shader.GetUniformLocation("projection_matrix"), false, ref mvp);
             GL.Uniform1(_shader.GetUniformLocation("in_fontTexture"), 0);
@@ -580,8 +602,17 @@ void main()
                         if (program != boundProgram)
                         {
                             GL.UseProgram(program);
-                            if (program != _shader.Program)
-                                GL.UniformMatrix4(GL.GetUniformLocation(program, "projection_matrix"), false, ref mvp);
+                            //All commands in this frame share a projection. Query each
+                            //program's location once, then upload once per frame.
+                            if (_projectedPrograms.Add(program))
+                            {
+                                if (!TextureProjectionLocations.TryGetValue(program, out int location))
+                                {
+                                    location = GL.GetUniformLocation(program, "projection_matrix");
+                                    TextureProjectionLocations[program] = location;
+                                }
+                                GL.UniformMatrix4(location, false, ref mvp);
+                            }
                             boundProgram = program;
                         }
                     }

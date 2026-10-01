@@ -26,15 +26,9 @@ namespace PlayerViewer.UI
             //Freeze the render size while exporting: the deterministic export (and the trim
             //path's temp buffer) assume every frame shares fixed dimensions.
             if (!_animExporting)
-                _pipeline.Resize((int)size.X, (int)size.Y);
-
-            //During an export the capture pass already renders each frame (often supersampled),
-            // so skip the redundant viewport render and just preview the last captured frame.
-            if (!_animExporting)
             {
-                UpdateBackgroundPreview();
-                UpdateViewportBackground();
-                _pipeline.Render(ActiveScene);
+                _pipeline.PreviewSupersample = _config.PreviewSupersample;
+                _pipeline.Resize((int)size.X, (int)size.Y);
             }
 
             float fit = size.Y / _pipeline.Height;
@@ -80,6 +74,20 @@ namespace PlayerViewer.UI
                 ImGui.Image((IntPtr)_pipeline.ViewportTextureId, imgSize, uv0, uv1);
 
             _viewportHovered = ImGui.IsItemHovered();
+            //Normal orbit/pan input must affect the image drawn this frame. Authoring
+            //tools still get first refusal on clicks before camera input is handled.
+            bool cameraBeforeRender = _pipeline.LimbPaint == null && !GizmoShown && !_aimShown;
+            if (!_animExporting && cameraBeforeRender)
+                UpdateCameraInput(pos);
+
+            //ImGui records the texture ID now and samples it later, after this render.
+            //Exports preview the capture pass's image without a redundant scene render.
+            if (!_animExporting)
+            {
+                UpdateBackgroundPreview();
+                UpdateViewportBackground();
+                _pipeline.Render(ActiveScene);
+            }
             DrawClothOverlay(pos, imgSize, uv0, uv1, _viewportHovered);
             DrawLimbBones(pos, imgSize, uv0, uv1);
             DrawAimHandle(pos, imgSize, uv0, uv1, _viewportHovered);
@@ -90,7 +98,7 @@ namespace PlayerViewer.UI
             UpdateHeadPreview();
             //Freeze the camera during a full-animation export so every frame shares
             //the exact same viewpoint.
-            if (!_animExporting)
+            if (!_animExporting && !cameraBeforeRender)
                 UpdateCameraInput(pos);
         }
 
@@ -156,24 +164,23 @@ namespace PlayerViewer.UI
             //WASD pans in camera space (W/S = forward/back, A/D = left/right).
             if (!io.WantTextInput && CafeStudio.UI.ImGuiController.ApplicationHasFocus)
             {
-                var kb = Keyboard.GetState();
                 float move = cam.TargetDistance * io.DeltaTime;
                 var dir = OpenTK.Vector3.Zero;
                 var rot = cam.InverseRotationMatrix;
-                if (kb.IsKeyDown(Key.W))
+                if (io.KeysDown[(int)Key.W])
                     dir -= rot.Row2;
-                if (kb.IsKeyDown(Key.S))
+                if (io.KeysDown[(int)Key.S])
                     dir += rot.Row2;
-                if (kb.IsKeyDown(Key.A))
+                if (io.KeysDown[(int)Key.A])
                     dir -= rot.Row0;
-                if (kb.IsKeyDown(Key.D))
+                if (io.KeysDown[(int)Key.D])
                     dir += rot.Row0;
-                if (kb.IsKeyDown(Key.Space))
+                if (io.KeysDown[(int)Key.Space])
                     dir += rot.Row1;
                 //While painting Shift sizes the brush and pans, and on the frame gizmo it turns
                 //snapping off: over it, dragging it, and until let go after a drag, it does not
                 //move the camera down. Nor while a transform gizmo is shown, where it frees snapping.
-                bool shift = kb.IsKeyDown(Key.ShiftLeft) || kb.IsKeyDown(Key.ShiftRight);
+                bool shift = io.KeyShift;
                 if (AimDragging || (shift && _aimShiftHeld) || AimHandleNear(io.MousePos))
                     _aimShiftHeld = shift;
                 else if (!shift)

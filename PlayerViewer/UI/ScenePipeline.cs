@@ -173,10 +173,13 @@ namespace PlayerViewer.UI
         //When >0, export/capture renders use this supersample scale instead of the auto
         //budget above (set from the Settings factor); reset to 0 for interactive sizing.
         public int ExportScaleOverride;
+
+        /// <summary>Interactive preview quality; captures use their own export factor.</summary>
+        public int PreviewSupersample = 2;
         int _screenScale = SuperSample;
 
         int EffectiveScale(int width, int height) =>
-            ExportScaleOverride > 0 ? ExportScaleOverride : ScaleFor(width, height);
+            ExportScaleOverride > 0 ? ExportScaleOverride : Math.Min(PreviewSupersample, ScaleFor(width, height));
 
         public void Init()
         {

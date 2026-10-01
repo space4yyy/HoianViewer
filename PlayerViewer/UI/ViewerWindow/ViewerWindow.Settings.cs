@@ -32,6 +32,15 @@ namespace PlayerViewer.UI
             DrawAppearanceSettings();
             DrawListSettings();
 
+            Widgets.SectionHeader("Preview quality");
+            Widgets.Checkbox(
+                "Sharper preview (2x)",
+                _config.PreviewSupersample == 2,
+                v => _config.PreviewSupersample = v ? 2 : 1,
+                () => dirty = true
+            );
+            Widgets.WrappedText("Turn off for smoother camera movement. Export quality is set separately.");
+
             Widgets.SectionHeader("Trim deadspace");
             Widgets.WrappedText("Crops empty space off exports. Applies to every format.");
             ImGui.Spacing();

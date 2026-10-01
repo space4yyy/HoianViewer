@@ -24,6 +24,18 @@ namespace GLFrameworkEngine
         //What the GL buffer holds, so an upload of the same bytes is skipped.
         private byte[] _uploaded = Array.Empty<byte>();
         private int _uploadedSize = -1;
+        private int _minimumStorageSize;
+        //Changed blocks rotate through three stores, so queued draws can keep
+        //reading earlier versions. Unchanged blocks keep their current store.
+        private sealed class MacStore
+        {
+            public int Id;
+            public byte[] Data = Array.Empty<byte>();
+            public int DataSize = -1;
+        }
+        private MacStore[] _macStores;
+        private int _macStoreIndex;
+        private int _macStoreCapacity;
 
         static readonly byte[] Zeros = new byte[16];
 
@@ -202,8 +214,7 @@ namespace GLFrameworkEngine
                             ActiveUniformBlockParameter.UniformBlockDataSize, out requiredSize);
                         _blockSizeCache[(programID, index)] = requiredSize;
                     }
-                    if (Buffer.Count < requiredSize)
-                        AddZeros(requiredSize - Buffer.Count);
+                    _minimumStorageSize = Math.Max(_minimumStorageSize, requiredSize);
                 }
                 binding = binding != -1 ? binding : index;
                 if (!_bindingCache.TryGetValue((programID, index), out int set) || set != binding)
@@ -217,17 +228,23 @@ namespace GLFrameworkEngine
                 return;
             }
 
+            //An upload may rotate the store, so bind the resulting ID afterwards.
+            UpdateBufferData();
             if (!_boundBuffers.TryGetValue(binding, out int bound) || bound != ID)
             {
                 GL.BindBufferBase(BufferRangeTarget.UniformBuffer, binding, ID);
                 _boundBuffers[binding] = ID;
             }
-            UpdateBufferData();
         }
 
         public void UpdateBufferData()
         {
             var data = CollectionsMarshal.AsSpan(Buffer);
+            if (OperatingSystem.IsMacOS())
+            {
+                UpdateMacBufferData(data);
+                return;
+            }
             if (data.Length == _uploadedSize && data.SequenceEqual(_uploaded.AsSpan(0, _uploadedSize)))
                 return;
 
@@ -244,12 +261,66 @@ namespace GLFrameworkEngine
             _uploadedSize = data.Length;
         }
 
+        //Keep Apple's required array tail allocated and zeroed on the GPU. Each
+        //store remembers its own contents, including bytes a shorter block must clear.
+        private void UpdateMacBufferData(ReadOnlySpan<byte> data)
+        {
+            int requiredSize = Math.Max(data.Length, _minimumStorageSize);
+            if (_macStores == null || _macStoreCapacity < requiredSize)
+            {
+                //Prepare all versions when a block first loads or grows, so the
+                //first camera movement does not allocate the remaining stores.
+                _macStores ??= new[] { new MacStore { Id = ID }, new MacStore(), new MacStore() };
+                foreach (var prepared in _macStores)
+                {
+                    if (prepared.Id == 0)
+                        GL.GenBuffers(1, out prepared.Id);
+                    prepared.Data = new byte[requiredSize];
+                    data.CopyTo(prepared.Data);
+                    GL.BindBuffer(BufferTarget.UniformBuffer, prepared.Id);
+                    GL.BufferData(BufferTarget.UniformBuffer, requiredSize, prepared.Data, BufferUsageHint.DynamicDraw);
+                    prepared.DataSize = data.Length;
+                }
+                GL.BindBuffer(BufferTarget.UniformBuffer, 0);
+                _macStoreCapacity = requiredSize;
+            }
+
+            var current = _macStores[_macStoreIndex];
+            if (current.DataSize == data.Length && current.Data.Length >= requiredSize
+                && data.SequenceEqual(current.Data.AsSpan(0, data.Length)))
+                return;
+
+            if (current.DataSize >= 0)
+                _macStoreIndex = (_macStoreIndex + 1) % _macStores.Length;
+            var store = _macStores[_macStoreIndex];
+            ID = store.Id;
+            if (store.DataSize != data.Length || !data.SequenceEqual(store.Data.AsSpan(0, data.Length)))
+            {
+                int uploadSize = Math.Max(data.Length, store.DataSize);
+                if (data.Length < store.DataSize)
+                    store.Data.AsSpan(data.Length, store.DataSize - data.Length).Clear();
+                data.CopyTo(store.Data);
+                if (uploadSize > 0)
+                {
+                    Bind();
+                    GL.BufferSubData(BufferTarget.UniformBuffer, IntPtr.Zero, uploadSize, store.Data);
+                    GL.BindBuffer(BufferTarget.UniformBuffer, 0);
+                }
+            }
+            store.DataSize = data.Length;
+        }
+
         public void Dispose()
         {
             //A deleted buffer leaves its binding points, and its name can come back.
-            foreach (var key in _boundBuffers.Where(p => p.Value == ID).Select(p => p.Key).ToList())
+            var ids = _macStores == null
+                ? new[] { ID }
+                : _macStores.Where(s => s.Id != 0).Select(s => s.Id).ToArray();
+            foreach (var key in _boundBuffers.Where(p => ids.Contains(p.Value)).Select(p => p.Key).ToList())
                 _boundBuffers.Remove(key);
-            GL.DeleteBuffer(ID);
+            foreach (int id in ids)
+                GL.DeleteBuffer(id);
+            _macStores = null;
             Buffer.Clear();
             _uploadedSize = -1;
         }

@@ -40,7 +40,19 @@ folder together. The arm64 shader specialiser is included under
 with `sh tools/uberslicer/build-macos.sh` (requires Xcode Command Line Tools).
 On macOS, the UI uses logical window points for Retina scaling and mouse input;
 translated game shaders are adapted to GLSL 4.10, and unsupported BC6/BC7 textures
-use CPU decoding.
+use CPU decoding. The macOS preview defaults to 1x sampling for smoother camera
+movement. Enable **Settings → Preview quality → Sharper preview (2x)** for a
+sharper preview; exports use their separate supersample setting.
+
+### macOS drag-start delay
+
+If camera rotation pauses briefly at the start of a drag, temporarily quit
+BetterTouchTool and compare again. In a verified local case, mouse motion stopped
+for about 150 ms while the viewer kept rendering at about 60 FPS; quitting
+BetterTouchTool removed that pause. If you need to keep BTT running, test disabling
+its window snapping for the viewer. This setting was implicated in a
+[similar report on the BTT forum](https://community.folivora.ai/t/how-can-i-disable-btts-mouse-event-filtering-its-cgeventtap-delays-mousedragged-200ms-at-drag-start/47350),
+but the per-app workaround has not been verified here.
 
 
 `dotnet tool restore` is needed if you want to run csharpier for formatting.

@@ -62,7 +62,7 @@ namespace PlayerViewer.UI
                 repeat: false
             );
             _rimProgram = UiShaders.Program("SideOrderRim.vert", "SideOrderRim.frag");
-            CafeStudio.UI.ImGuiController.TexturePrograms[RimId] = _rimProgram;
+            CafeStudio.UI.ImGuiController.RegisterTextureProgram(RimId, _rimProgram);
             RimShade = _rimShade;
         }
 
