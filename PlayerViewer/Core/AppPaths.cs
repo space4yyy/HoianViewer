@@ -7,7 +7,7 @@ namespace PlayerViewer.Core
     /// <summary>
     /// Per-user data directory, created on first access: %APPDATA%\PlayerViewer on Windows,
     /// ~/.config/PlayerViewer on Linux/macOS. Holds settings.json, an optional bundled ffmpeg, and
-    /// the shader caches when the exe folder is not writable.
+    /// the shader caches on macOS, or when the exe folder is not writable elsewhere.
     /// </summary>
     public static class AppPaths
     {
@@ -29,6 +29,10 @@ namespace PlayerViewer.Core
 
         static string ResolveCacheDir(string name)
         {
+            //An app bundle must stay immutable after signing, even when the user
+            //owns it. macOS caches always belong with the user's settings.
+            if (OperatingSystem.IsMacOS())
+                return Path.Combine(DataDir, name);
             return IsWritable(AppContext.BaseDirectory)
                 ? Path.Combine(AppContext.BaseDirectory, name)
                 : Path.Combine(DataDir, name);

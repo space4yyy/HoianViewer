@@ -44,6 +44,20 @@ use CPU decoding. The macOS preview defaults to 1x sampling for smoother camera
 movement. Enable **Settings → Preview quality → Sharper preview (2x)** for a
 sharper preview; exports use their separate supersample setting.
 
+To create a double-clickable app and a drag-to-Applications disk image on macOS:
+
+```
+sh tools/package-macos.sh
+```
+
+Outputs are `publish/macos/HoianViewer.app` and
+`publish/macos/HoianViewer-macos-arm64.dmg`. The app includes its runtime and
+native libraries; Homebrew and .NET are only needed on the build machine.
+The bundle's minimum macOS version is derived from the native build inputs
+(currently macOS 27). macOS shader caches are stored in the user's data directory.
+The script applies an ad-hoc signature for local use; Developer ID signing and
+Apple notarization are not included.
+
 ### macOS drag-start delay
 
 If camera rotation pauses briefly at the start of a drag, temporarily quit
