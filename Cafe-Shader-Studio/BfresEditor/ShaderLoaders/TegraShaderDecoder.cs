@@ -318,7 +318,7 @@ namespace BfresEditor
             string programKey = $"{vertHash}_{fragHash}";
             string key = hasPatch ? programKey + "_fbpatch" : programKey;
             if (OperatingSystem.IsMacOS())
-                key += "_mac410_v2";
+                key += "_mac410_v4";
 
             string vertPath = Path.Combine(CacheDir, $"{programKey}.vert");
             string fragPath = Path.Combine(CacheDir, $"{fragHash}.frag");
@@ -366,7 +366,22 @@ namespace BfresEditor
                 {
                     fragSource = MacCompatibleSource(fragSource, fragment: true);
                     vertSource = MacCompatibleSource(vertSource);
-                    for (int i = 0; i < shaderModel.Attributes.Count; i++)
+                    //GLSL 4.10 requires interpolation qualifiers to match across
+                    //stages; newer desktop drivers accept a fragment-only flat.
+                    foreach (System.Text.RegularExpressions.Match input in
+                        System.Text.RegularExpressions.Regex.Matches(fragSource,
+                            @"(?:(flat|noperspective|smooth)\s+)?in\s+(\w+)\s+(pv_varying\d+)\s*;"))
+                    {
+                        string qualifier = input.Groups[1].Value;
+                        string type = input.Groups[2].Value;
+                        string name = input.Groups[3].Value;
+                        vertSource = System.Text.RegularExpressions.Regex.Replace(vertSource,
+                            $@"(?:(flat|noperspective|smooth)\s+)?out\s+{type}\s+{name}\s*;",
+                            $"{(qualifier.Length == 0 ? "" : qualifier + " ")}out {type} {name};");
+                    }
+                    //Effects have their own attribute reflection and pass no material
+                    //shader model. Only model meshes need the integer bone fix.
+                    for (int i = 0; shaderModel != null && i < shaderModel.Attributes.Count; i++)
                     {
                         string name = shaderModel.Attributes.GetKey(i).TrimStart('_');
                         if (name != "i0" && name != "i1")
@@ -432,6 +447,11 @@ namespace BfresEditor
             source = System.Text.RegularExpressions.Regex.Replace(source,
                 @"binding\s*=\s*\d+\s*,\s*", "");
             //Apple links stage interfaces by name even when both carry a location.
+            //Let its linker pack varyings: fixed locations mixed with flat outputs
+            //can exhaust Apple's interpolator slots despite fitting the component limit.
+            source = System.Text.RegularExpressions.Regex.Replace(source,
+                @"layout\s*\(\s*location\s*=\s*\d+\s*\)\s*(?=(?:(?:flat|smooth|noperspective)\s+)?"
+                    + (fragment ? "in" : "out") + @"\s+vec4\s+" + (fragment ? "in_attr" : "out_attr") + @"\d+\b)", "");
             source = System.Text.RegularExpressions.Regex.Replace(source,
                 fragment ? @"\bin_attr(\d+)\b" : @"\bout_attr(\d+)\b", "pv_varying$1");
             return source;

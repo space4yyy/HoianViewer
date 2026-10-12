@@ -117,7 +117,9 @@ namespace PlayerViewer.Effects.Gl
                             Math.Min(size, surface.Length)
                         );
                     }
-                    if (f.Compressed != 0 && array)
+                    if (OperatingSystem.IsMacOS() && (name.StartsWith("BC7_") || name.StartsWith("BC6H_")))
+                        UploadMacBptc(target, mip, w, h, layers, data, size, name, array);
+                    else if (f.Compressed != 0 && array)
                         GL.CompressedTexImage3D(
                             target,
                             mip,
@@ -169,6 +171,56 @@ namespace PlayerViewer.Effects.Gl
             GL.TexParameter(target, TextureParameterName.TextureSwizzleA, Swizzle(t.ChannelAlpha));
             GL.BindTexture(target, 0);
             return new GlTexture(id, target);
+        }
+
+        //Apple OpenGL has no BPTC. Preserve mip/layer layout and the BC6 HDR range.
+        static void UploadMacBptc(TextureTarget target, int mip, int w, int h, int layers,
+            byte[] blocks, int layerSize, string format, bool array)
+        {
+            var decoder = new BCnEncoder.Decoder.BcDecoder();
+            int alignedW = (w + 3) / 4 * 4, alignedH = (h + 3) / 4 * 4;
+            bool hdr = format.StartsWith("BC6H_");
+            var bytes = hdr ? null : new byte[w * h * layers * 4];
+            var floats = hdr ? new float[w * h * layers * 4] : null;
+            for (int layer = 0; layer < layers; layer++)
+            {
+                var data = new byte[layerSize];
+                System.Buffer.BlockCopy(blocks, layer * layerSize, data, 0, layerSize);
+                if (hdr)
+                {
+                    var pixels = decoder.DecodeRawHdr(data, alignedW, alignedH,
+                        format == "BC6H_SF16" ? BCnEncoder.Shared.CompressionFormat.Bc6S
+                            : BCnEncoder.Shared.CompressionFormat.Bc6U);
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++)
+                        {
+                            var p = pixels[y * alignedW + x];
+                            int i = ((layer * h + y) * w + x) * 4;
+                            floats[i] = p.r; floats[i + 1] = p.g; floats[i + 2] = p.b; floats[i + 3] = 1;
+                        }
+                }
+                else
+                {
+                    var pixels = decoder.DecodeRaw(data, alignedW, alignedH, BCnEncoder.Shared.CompressionFormat.Bc7);
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++)
+                        {
+                            var p = pixels[y * alignedW + x];
+                            int i = ((layer * h + y) * w + x) * 4;
+                            bytes[i] = p.r; bytes[i + 1] = p.g; bytes[i + 2] = p.b; bytes[i + 3] = p.a;
+                        }
+                }
+            }
+            if (hdr && array)
+                GL.TexImage3D(target, mip, PixelInternalFormat.Rgba16f, w, h, layers, 0, PixelFormat.Rgba, PixelType.Float, floats);
+            else if (hdr)
+                GL.TexImage2D(target, mip, PixelInternalFormat.Rgba16f, w, h, 0, PixelFormat.Rgba, PixelType.Float, floats);
+            else if (array)
+                GL.TexImage3D(target, mip, format == "BC7_SRGB" ? PixelInternalFormat.Srgb8Alpha8 : PixelInternalFormat.Rgba8,
+                    w, h, layers, 0, PixelFormat.Rgba, PixelType.UnsignedByte, bytes);
+            else
+                GL.TexImage2D(target, mip, format == "BC7_SRGB" ? PixelInternalFormat.Srgb8Alpha8 : PixelInternalFormat.Rgba8,
+                    w, h, 0, PixelFormat.Rgba, PixelType.UnsignedByte, bytes);
         }
 
         static int Swizzle(ChannelType c) =>

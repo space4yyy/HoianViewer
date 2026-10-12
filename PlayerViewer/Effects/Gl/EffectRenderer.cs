@@ -52,6 +52,8 @@ namespace PlayerViewer.Effects.Gl
 
         readonly Dictionary<VfxFile, FileResources> _files = new();
         readonly int[] _blockBuffers = new int[2 + 16];
+        readonly Dictionary<(int Program, int Index), int> _macBlockSizes = new();
+        readonly Dictionary<int, byte[]> _macBlockData = new();
         int _particleBuffer,
             _vao,
             _storageBuffer,
@@ -281,6 +283,32 @@ namespace PlayerViewer.Effects.Gl
             if (vsIndex < 0 && fsIndex < 0)
                 return;
             data ??= ZeroBlock;
+            if (OperatingSystem.IsMacOS())
+            {
+                //Translated banks declare full arrays. Apple requires GPU storage
+                //for the declared size, even when only a short prefix is read.
+                int required = data.Length;
+                foreach (int index in new[] { vsIndex, fsIndex })
+                {
+                    if (index < 0)
+                        continue;
+                    if (!_macBlockSizes.TryGetValue((programId, index), out int size))
+                    {
+                        GL.GetActiveUniformBlock(programId, index,
+                            ActiveUniformBlockParameter.UniformBlockDataSize, out size);
+                        _macBlockSizes[(programId, index)] = size;
+                    }
+                    required = Math.Max(required, size);
+                }
+                if (required > data.Length)
+                {
+                    if (!_macBlockData.TryGetValue(binding, out var padded) || padded.Length != required)
+                        _macBlockData[binding] = padded = new byte[required];
+                    Array.Clear(padded);
+                    data.CopyTo(padded, 0);
+                    data = padded;
+                }
+            }
             int buffer = _blockBuffers[binding];
             GL.BindBuffer(BufferTarget.UniformBuffer, buffer);
             GL.BufferData(
@@ -581,6 +609,8 @@ namespace PlayerViewer.Effects.Gl
             foreach (var r in _files.Values)
                 r.Dispose();
             _files.Clear();
+            _macBlockSizes.Clear();
+            _macBlockData.Clear();
             if (_vao != 0)
             {
                 GL.DeleteVertexArray(_vao);

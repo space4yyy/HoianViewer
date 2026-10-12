@@ -82,13 +82,17 @@ namespace PlayerViewer.Effects.Gl
                     blocks.Add((block, vs, fs));
             }
             Blocks = blocks;
-            GL.GetProgramInterface(
-                id,
-                ProgramInterface.ShaderStorageBlock,
-                ProgramInterfaceParameter.ActiveResources,
-                out int storage
-            );
-            StorageBlocks = storage;
+            //Program interface queries are OpenGL 4.3; macOS stops at 4.1.
+            if (!OperatingSystem.IsMacOS())
+            {
+                GL.GetProgramInterface(
+                    id,
+                    ProgramInterface.ShaderStorageBlock,
+                    ProgramInterfaceParameter.ActiveResources,
+                    out int storage
+                );
+                StorageBlocks = storage;
+            }
             VertexConstants = GL.GetUniformBlockIndex(id, "_vp_c1");
             FragmentConstants = GL.GetUniformBlockIndex(id, "_fp_c1");
 
