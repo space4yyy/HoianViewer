@@ -19,7 +19,9 @@ namespace PlayerViewer.Physics
             foreach (var piece in file.Container.ClothDatas)
                 if (file.Params.MeshFor(piece.Name) == null)
                 {
-                    string root = file.SkeletonFor(piece)?.BoneNames.FirstOrDefault() ?? "";
+                    string root = ClothSkeleton.ModelName(
+                        file.SkeletonFor(piece)?.BoneNames.FirstOrDefault() ?? ""
+                    );
                     file.Params.AddMesh(piece.Name, root);
                     notes.Add($"added cloth_mesh parameters for {piece.Name}");
                 }
@@ -60,7 +62,7 @@ namespace PlayerViewer.Physics
         )
         {
             var report = new List<string>();
-            var target = new ClothPacks(new Romfs(romfs.Root, root, true, romfs.SdodrRoot));
+            var target = new ClothPacks(new Romfs(romfs.Root, root, true, romfs.SdodrRoot, romfs.Game));
             foreach (var actor in actors)
             {
                 //A pack already in the target folder is built on, so earlier writes there are kept.
@@ -77,7 +79,7 @@ namespace PlayerViewer.Physics
                 report.AddRange(notes.Select(n => "  " + n));
             }
             //Read back through the same lookup the game uses.
-            var check = new ClothPacks(new Romfs(romfs.Root, root, true, romfs.SdodrRoot));
+            var check = new ClothPacks(new Romfs(romfs.Root, root, true, romfs.SdodrRoot, romfs.Game));
             foreach (var actor in actors)
             {
                 var src = check.FindFor(actor);

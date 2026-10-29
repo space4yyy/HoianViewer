@@ -29,6 +29,9 @@ namespace PlayerViewer.Effects.Gl
         /// <summary>Active storage blocks; the stripe programs read their points from the first.</summary>
         public int StorageBlocks { get; private set; }
 
+        /// <summary>The storage blocks the fragment stage reads (Raiders' light tables)</summary>
+        public IReadOnlyList<(int Index, string Name)> FragmentStorageBlocks { get; private set; }
+
         /// <summary>GL block index of each stage's constant bank, c1, or -1.</summary>
         public int VertexConstants { get; private set; }
         public int FragmentConstants { get; private set; }
@@ -82,7 +85,8 @@ namespace PlayerViewer.Effects.Gl
                     blocks.Add((block, vs, fs));
             }
             Blocks = blocks;
-            //Program interface queries are OpenGL 4.3; macOS stops at 4.1.
+            var fragmentStorage = new List<(int, string)>();
+            //Program interface and storage queries require OpenGL 4.3.
             if (!OperatingSystem.IsMacOS())
             {
                 GL.GetProgramInterface(
@@ -92,7 +96,30 @@ namespace PlayerViewer.Effects.Gl
                     out int storage
                 );
                 StorageBlocks = storage;
+                for (int i = 0; i < storage; i++)
+                {
+                    GL.GetProgramResourceName(
+                        id,
+                        ProgramInterface.ShaderStorageBlock,
+                        i,
+                        64,
+                        out _,
+                        out string name
+                    );
+                    //The translation names a fragment storage block after its location.
+                    if (name.StartsWith("_fp_s", StringComparison.Ordinal))
+                        fragmentStorage.Add(
+                            (
+                                i,
+                                int.TryParse(name.AsSpan(5), out int location)
+                                    ? program.FragmentStorageAt(location)
+                                    : null
+                            )
+                        );
+                }
             }
+            FragmentStorageBlocks = fragmentStorage;
+
             VertexConstants = GL.GetUniformBlockIndex(id, "_vp_c1");
             FragmentConstants = GL.GetUniformBlockIndex(id, "_fp_c1");
 

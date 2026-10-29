@@ -4,6 +4,11 @@ Prebuilt `uberspec` binaries, one folder per platform.
 Source at [https://github.com/nvnprogram/UberSlicer](https://github.com/nvnprogram/UberSlicer)
 
 The `osx-arm64/uberspec` binary is built with Apple Clang from upstream commit
+`c32fcf2a7dd6cc19d733dc156f755197e486c880`, including the SM50 and SM86 backends.
+Rebuild with `sh tools/uberslicer/build-macos.sh [source-directory]`.
+The macOS build omits upstream's unsupported `-static` link flag.
+
+The `osx-arm64/uberspec` binary is built with Apple Clang from upstream commit
 `892d0397197a192740c1a76220a2ebbbdf2ec326` (codegen 3).
 Rebuild with `sh tools/uberslicer/build-macos.sh [source-directory]`.
 The macOS build omits upstream's unsupported `-static` link flag.

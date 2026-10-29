@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using EffectLibrary;
+using PlayerViewer.Core;
+using PlayerViewer.Core.Formats;
 using PlayerViewer.Effects.Sim;
 using PlayerViewer.Effects.Viewer;
 
@@ -163,7 +165,10 @@ namespace PlayerViewer.UI
         {
             CheckEffectLoop();
             var settled = _loopCheckOk
-                ? loop with { Unsure = null }
+                ? loop with
+                {
+                    Unsure = null,
+                }
                 : LoopInfo.NotLoopable($"{loop.Unsure}, and the loop check found: {_loopCheck}");
             _effectFile.Settle(play.Set, EffectMinLoopFrames, settled);
             play.SetLoop(settled);
@@ -402,10 +407,14 @@ namespace PlayerViewer.UI
                 if (tries == 600)
                     throw new TimeoutException("its programs did not finish linking");
                 System.Threading.Thread.Sleep(50);
+                GLFrameworkEngine.ShaderProgram.FrameStamp++;
             }
         }
 
-        /// <summary>The romfs's own effect files, base and Side Order, found once per romfs.</summary>
+        /// <summary>
+        /// The romfs's own effect files, base and Side Order, found once per romfs. Raiders' are
+        /// also taken from its effect file table and listed by name.
+        /// </summary>
         List<string> RomfsEffectFiles()
         {
             if (_romfsEffects == null && _romfs != null)
@@ -413,6 +422,17 @@ namespace PlayerViewer.UI
                 try
                 {
                     _romfsEffects = _romfs.FindFiles("Effect", "*.esetb.byml.zs");
+                    _romfsEffectInfo =
+                        _romfs.Game == GameKind.Spiral ? EffectFileInfo.Find(_romfs) : null;
+                    if (_romfsEffectInfo != null)
+                        _romfsEffects = _romfsEffectInfo
+                            .Files.Select(n => _romfs.Resolve(_romfsEffectInfo.PathOf(n)))
+                            .Where(p => p != null)
+                            .Select(Path.GetFullPath)
+                            .Concat(_romfsEffects.Select(Path.GetFullPath))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .OrderBy(EffectFileInfo.NameOf, StringComparer.OrdinalIgnoreCase)
+                            .ToList();
                 }
                 catch (Exception ex)
                 {
@@ -424,5 +444,6 @@ namespace PlayerViewer.UI
         }
 
         List<string> _romfsEffects;
+        EffectFileInfo _romfsEffectInfo;
     }
 }
