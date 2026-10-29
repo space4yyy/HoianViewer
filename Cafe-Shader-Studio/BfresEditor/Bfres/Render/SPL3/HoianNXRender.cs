@@ -1035,6 +1035,7 @@ namespace BfresEditor
         static GLTexture2D WhiteTexture;
         static GLTexture2D BlackTexture;
         static GLTexture2DArray WhiteArrayTexture;
+        static GLTexture2DArray WhiteDepthArrayTexture;
         static GLTextureCube CubemapTexture;
         static GLTextureCubeArray PrefilterCubeArrayTexture;
         static GLTexture2D BrdfTexture;
@@ -1223,8 +1224,21 @@ namespace BfresEditor
                 case ActiveUniformType.SamplerCubeMapArray:
                     return PrefilterCubes;
                 case ActiveUniformType.Sampler2DArray:
-                case ActiveUniformType.Sampler2DArrayShadow:
                     return WhiteArrayTexture;
+                case ActiveUniformType.Sampler2DArrayShadow:
+                    if (WhiteDepthArrayTexture == null)
+                    {
+                        WhiteDepthArrayTexture = GLTexture2DArray.CreateUncompressedTexture(1, 1, 4, 1,
+                            PixelInternalFormat.DepthComponent32f, PixelFormat.DepthComponent, PixelType.Float);
+                        WhiteDepthArrayTexture.Bind();
+                        GL.TexImage3D(TextureTarget.Texture2DArray, 0, PixelInternalFormat.DepthComponent32f,
+                            1, 1, 4, 0, PixelFormat.DepthComponent, PixelType.Float, new float[] { 1, 1, 1, 1 });
+                        GL.TexParameter(TextureTarget.Texture2DArray, TextureParameterName.TextureCompareMode, (int)TextureCompareMode.CompareRefToTexture);
+                        GL.TexParameter(TextureTarget.Texture2DArray, TextureParameterName.TextureCompareFunc, (int)DepthFunction.Lequal);
+                        WhiteDepthArrayTexture.Unbind();
+                        SetSystemSamplerParams(WhiteDepthArrayTexture);
+                    }
+                    return WhiteDepthArrayTexture;
                 default:
                     //Split-sum specular BRDF lookup tables (scale/bias in rg). Binding
                     //black kills the whole reflection term, e.g. on translucent glass.

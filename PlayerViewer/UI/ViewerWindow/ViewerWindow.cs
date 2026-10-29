@@ -539,6 +539,15 @@ namespace PlayerViewer.UI
                 _lastFrameTime = now;
                 RenderFrame((float)dt);
             }
+            catch (NotSupportedException ex) when (OperatingSystem.IsMacOS() && !ExportBusy)
+            {
+                //A rejected model shader must return to setup, rather than be
+                //drawn with an invalid program and crash in the native driver.
+                Console.WriteLine($"[UI] Unsupported renderer feature: {ex}");
+                _needsLoad = false;
+                _romfsError = ex.Message;
+                ShowRomfsSetup();
+            }
             finally
             {
                 _inFrame = false;

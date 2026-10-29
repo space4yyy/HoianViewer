@@ -8,6 +8,7 @@ using Toolbox.Core;
 using Toolbox.Core.IO;
 using GLFrameworkEngine;
 using System.Text;
+using OpenTK.Graphics.OpenGL;
 namespace BfresEditor
 {
     public partial class TegraShaderDecoder
@@ -316,7 +317,7 @@ namespace BfresEditor
             string programKey = $"{vertHash}_{fragHash}";
             string key = hasPatch ? programKey + "_fbpatch" : programKey;
             if (OperatingSystem.IsMacOS())
-                key += "_mac410_v4";
+                key += "_mac410_v6";
 
             string vertPath = Path.Combine(CacheDir, $"{programKey}.vert");
             string fragPath = Path.Combine(CacheDir, $"{fragHash}.frag");
@@ -362,6 +363,11 @@ namespace BfresEditor
                 {
                     fragSource = MacCompatibleSource(fragSource, fragment: true);
                     vertSource = MacCompatibleSource(vertSource);
+                    if (shaderModel != null)
+                    {
+                        vertSource = MacReadonlyStorageSource(vertSource);
+                        fragSource = MacReadonlyStorageSource(fragSource);
+                    }
                     //GLSL 4.10 requires interpolation qualifiers to match across
                     //stages; newer desktop drivers accept a fragment-only flat.
                     foreach (System.Text.RegularExpressions.Match input in
@@ -411,6 +417,17 @@ namespace BfresEditor
                     program = new ShaderProgram(
                         new FragmentShader(fragSource),
                         new VertexShader(vertSource));
+
+                    if (OperatingSystem.IsMacOS())
+                    {
+                        GL.GetProgram(program.program, GetProgramParameterName.LinkStatus, out int linked);
+                        if (linked == 0)
+                        {
+                            string error = GL.GetProgramInfoLog(program.program);
+                            program.Dispose();
+                            throw new NotSupportedException("This model shader is not supported by macOS OpenGL: " + error);
+                        }
+                    }
 
                     SaveProgramBinary(program, binaryPath);
                 }

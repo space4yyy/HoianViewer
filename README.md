@@ -58,6 +58,13 @@ The bundle's minimum macOS version is derived from the native build inputs
 The script applies an ad-hoc signature for local use; Developer ID signing and
 Apple notarization are not included.
 
+Raiders model light/probe storage tables are adapted to read-only uniform buffers
+on macOS (up to 64 KiB per table), avoiding unavailable OpenGL 4.3 storage APIs.
+Storage writes and larger tables are not supported by this compatibility path.
+Rejected model shaders return to the romfs setup screen instead of being drawn
+with an invalid program. Raiders-specific effects have not been covered by this
+model compatibility check.
+
 ### macOS drag-start delay
 
 If camera rotation pauses briefly at the start of a drag, temporarily quit

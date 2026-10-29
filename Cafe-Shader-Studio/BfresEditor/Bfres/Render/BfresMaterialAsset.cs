@@ -115,7 +115,10 @@ namespace BfresEditor
 
             if (blend.State == GLMaterialBlendState.BlendState.Opaque)
             {
-                GL.Disable(EnableCap.AlphaTest);
+                //Fixed-function alpha test is absent in macOS's core profile;
+                //the translated fragment shader already implements it.
+                if (!OperatingSystem.IsMacOS())
+                    GL.Disable(EnableCap.AlphaTest);
                 GL.Disable(EnableCap.Blend);
                 return;
             }

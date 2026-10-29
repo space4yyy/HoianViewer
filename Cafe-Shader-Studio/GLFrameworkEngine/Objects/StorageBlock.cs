@@ -10,6 +10,9 @@ namespace GLFrameworkEngine
     {
         int _id;
         byte[] _uploaded;
+        byte[] _macPadded;
+        static readonly Lazy<int> MacBindings = new Lazy<int>(() => GL.GetInteger(GetPName.MaxUniformBufferBindings));
+        const int MacStorageSize = 65536;
 
         static readonly Dictionary<(int, string), int> _blockIndexCache = new Dictionary<(int, string), int>();
         static readonly Dictionary<(int, int), int> _bindingCache = new Dictionary<(int, int), int>();
@@ -32,15 +35,40 @@ namespace GLFrameworkEngine
                 GL.GenBuffers(1, out _id);
             if (ReferenceEquals(data, _uploaded))
                 return;
-            GL.BindBuffer(BufferTarget.ShaderStorageBuffer, _id);
-            GL.BufferData(BufferTarget.ShaderStorageBuffer, data.Length, data, BufferUsageHint.DynamicDraw);
-            GL.BindBuffer(BufferTarget.ShaderStorageBuffer, 0);
+            var target = OperatingSystem.IsMacOS() ? BufferTarget.UniformBuffer : BufferTarget.ShaderStorageBuffer;
+            byte[] upload = data;
+            if (OperatingSystem.IsMacOS())
+            {
+                if (data.Length > MacStorageSize)
+                    throw new NotSupportedException("This storage table exceeds macOS's emulated 64 KiB limit.");
+                _macPadded ??= new byte[MacStorageSize];
+                Array.Clear(_macPadded);
+                data.CopyTo(_macPadded, 0);
+                upload = _macPadded;
+            }
+            GL.BindBuffer(target, _id);
+            GL.BufferData(target, upload.Length, upload, BufferUsageHint.DynamicDraw);
+            GL.BindBuffer(target, 0);
             _uploaded = data;
         }
 
         /// <summary>Binds the buffer at <paramref name="binding"/> and points the program's block there.</summary>
         public void Bind(int programID, string blockName, int binding)
         {
+            if (OperatingSystem.IsMacOS())
+            {
+                if (!_blockIndexCache.TryGetValue((programID, blockName), out int location))
+                    _blockIndexCache[(programID, blockName)] = location =
+                        GL.GetUniformBlockIndex(programID, blockName);
+                if (location < 0)
+                    return;
+                int slot = MacBindings.Value - 1 - binding;
+                if (slot < 0)
+                    throw new NotSupportedException("Too many emulated shader storage buffers.");
+                GL.UniformBlockBinding(programID, location, slot);
+                GL.BindBufferBase(BufferRangeTarget.UniformBuffer, slot, _id);
+                return;
+            }
             if (!_blockIndexCache.TryGetValue((programID, blockName), out int index))
             {
                 index = GL.GetProgramResourceIndex(programID, ProgramInterface.ShaderStorageBlock, blockName);
@@ -61,6 +89,7 @@ namespace GLFrameworkEngine
             if (_id != 0)
                 GL.DeleteBuffer(_id);
             _id = 0;
+            _macPadded = null;
             _uploaded = null;
         }
     }

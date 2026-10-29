@@ -17,8 +17,8 @@ namespace BfresEditor
 
         private static readonly Lazy<bool> _supportsTextureShadowLod = new Lazy<bool>(() => HasExtension("GL_EXT_texture_shadow_lod"));
 
-        private static readonly Lazy<int> _maximumComputeSharedMemorySize = new Lazy<int>(() => GetLimit(All.MaxComputeSharedMemorySize));
-        private static readonly Lazy<int> _storageBufferOffsetAlignment = new Lazy<int>(() => GetLimit(All.ShaderStorageBufferOffsetAlignment));
+        private static readonly Lazy<int> _maximumComputeSharedMemorySize = new Lazy<int>(() => OperatingSystem.IsMacOS() ? 0 : GetLimit(All.MaxComputeSharedMemorySize));
+        private static readonly Lazy<int> _storageBufferOffsetAlignment = new Lazy<int>(() => OperatingSystem.IsMacOS() ? 16 : GetLimit(All.ShaderStorageBufferOffsetAlignment));
 
         private static bool _supportsNonConstantTextureOffset => _gpuVendor.Value == GpuVendor.Nvidia;
 

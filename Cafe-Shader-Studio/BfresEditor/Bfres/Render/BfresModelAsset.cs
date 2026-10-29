@@ -304,7 +304,8 @@ namespace BfresEditor
             GL.BindTexture(TextureTarget.Texture2D, 0);
             GL.Enable(EnableCap.DepthTest);
             GL.Disable(EnableCap.TextureCubeMapSeamless);
-            GL.Disable(EnableCap.AlphaTest);
+            if (!OperatingSystem.IsMacOS())
+                GL.Disable(EnableCap.AlphaTest);
             GL.Disable(EnableCap.Blend);
             GL.Enable(EnableCap.CullFace);
             GL.CullFace(CullFaceMode.Back);
@@ -337,7 +338,8 @@ namespace BfresEditor
             GL.DepthMask(true);
             GL.Enable(EnableCap.DepthTest);
             GL.Disable(EnableCap.TextureCubeMapSeamless);
-            GL.Disable(EnableCap.AlphaTest);
+            if (!OperatingSystem.IsMacOS())
+                GL.Disable(EnableCap.AlphaTest);
             GL.Disable(EnableCap.Blend);
             GL.Enable(EnableCap.CullFace);
             GL.CullFace(CullFaceMode.Back);
@@ -466,7 +468,8 @@ namespace BfresEditor
 
             GL.Enable(EnableCap.DepthTest);
             GL.Disable(EnableCap.TextureCubeMapSeamless);
-            GL.Disable(EnableCap.AlphaTest);
+            if (!OperatingSystem.IsMacOS())
+                GL.Disable(EnableCap.AlphaTest);
             GL.Disable(EnableCap.Blend);
             GL.Enable(EnableCap.CullFace);
             GL.CullFace(CullFaceMode.Back);
@@ -511,7 +514,8 @@ namespace BfresEditor
 
             GL.Enable(EnableCap.DepthTest);
             GL.Disable(EnableCap.TextureCubeMapSeamless);
-            GL.Disable(EnableCap.AlphaTest);
+            if (!OperatingSystem.IsMacOS())
+                GL.Disable(EnableCap.AlphaTest);
             GL.Disable(EnableCap.Blend);
             GL.Enable(EnableCap.CullFace);
             GL.CullFace(CullFaceMode.Back);
