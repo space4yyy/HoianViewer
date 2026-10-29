@@ -17,7 +17,7 @@ namespace PlayerViewer.UI
         //BlitzMain's em in pixels, so its capitals are a little over the main font's.
         const float EmPixels = 13.5f;
 
-        //Windows fonts for a romfs without its font archives.
+        //System fonts for a romfs without its font archives.
         static readonly Dictionary<string, string[]> SystemFonts = new()
         {
             ["KRko"] = new[] { "malgun.ttf", "gulim.ttc" },
@@ -141,6 +141,19 @@ namespace PlayerViewer.UI
 
         static RomfsFonts.Face SystemFont(string language)
         {
+            if (OperatingSystem.IsMacOS())
+            {
+                string[] candidates = language == "KRko"
+                    ? new[] { "/System/Library/Fonts/AppleSDGothicNeo.ttc" }
+                    : new[]
+                    {
+                        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+                        "/System/Library/Fonts/STHeiti Medium.ttc",
+                    };
+                foreach (string path in candidates)
+                    if (File.Exists(path))
+                        return new RomfsFonts.Face { Name = Path.GetFileName(path), Data = File.ReadAllBytes(path) };
+            }
             if (!SystemFonts.TryGetValue(language ?? "", out var names))
                 names = SystemFonts[""];
             string dir = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);

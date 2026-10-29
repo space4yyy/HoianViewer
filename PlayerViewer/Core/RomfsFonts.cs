@@ -6,7 +6,7 @@ namespace PlayerViewer.Core
 {
     /// <summary>
     /// The game's own text fonts out of <c>romfs/Font</c>, as plain TrueType or OpenType bytes:
-    /// BlitzMain, and the CJK font the game pairs it with for a language.
+    /// BlitzMain (SpMain in Raiders), and the CJK font paired with it for a language.
     /// </summary>
     public static class RomfsFonts
     {
@@ -19,12 +19,12 @@ namespace PlayerViewer.Core
             public float Scale = 1;
         }
 
-        /// <summary>BlitzMain, which carries Latin, Cyrillic and kana but no kanji or Hangul.</summary>
-        public static Face Blitz(Romfs romfs) => Load(romfs, "Font", "BlitzMain", 1);
+        /// <summary>The game's main face: BlitzMain in Splatoon 3, SpMain in Raiders.</summary>
+        public static Face Blitz(Romfs romfs) =>
+            Load(romfs, "Font", romfs?.Game == GameKind.Spiral ? "SpMain" : "BlitzMain", 1);
 
         /// <summary>
-        /// The font BlitzMain falls back to for a language, at the scale the game gives it
-        /// in that archive's <c>fcpx/BlitzMain_S.bfcpx</c>. Every language without an
+        /// The main face's CJK fallback at the pairing file's relative size. Every language without an
         /// archive of its own uses the common one's Japanese font.
         /// </summary>
         public static Face Fallback(Romfs romfs, string language) =>
@@ -40,7 +40,9 @@ namespace PlayerViewer.Core
         {
             try
             {
-                var data = romfs?.ReadFile($"Font/{archive}.Nin_NX_NVN.bfarc");
+                string platform = romfs?.Game == GameKind.Spiral
+                    ? SpiralLayout.PlatformName : ThunderLayout.PlatformName;
+                var data = romfs?.ReadFile($"Font/{archive}.{platform}.bfarc");
                 if (data == null)
                     return null;
                 var sarc = new Sarc(data);
