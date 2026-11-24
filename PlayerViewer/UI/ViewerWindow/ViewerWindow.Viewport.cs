@@ -13,6 +13,7 @@ namespace PlayerViewer.UI
     {
         bool _viewportHovered;
         bool _mouseDown;
+        NotSupportedException _viewportRendererError;
 
         IViewScene ActiveScene =>
             _effect != null ? _effect
@@ -86,7 +87,15 @@ namespace PlayerViewer.UI
             {
                 UpdateBackgroundPreview();
                 UpdateViewportBackground();
-                _pipeline.Render(ActiveScene);
+                try
+                {
+                    _pipeline.Render(ActiveScene);
+                }
+                catch (NotSupportedException ex) when (OperatingSystem.IsMacOS() && !ExportBusy)
+                {
+                    _viewportRendererError = ex;
+                    return;
+                }
             }
             DrawClothOverlay(pos, imgSize, uv0, uv1, _viewportHovered);
             DrawLimbBones(pos, imgSize, uv0, uv1);

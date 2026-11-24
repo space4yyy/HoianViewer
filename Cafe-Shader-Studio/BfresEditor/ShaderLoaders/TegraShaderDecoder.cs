@@ -317,7 +317,7 @@ namespace BfresEditor
             string programKey = $"{vertHash}_{fragHash}";
             string key = hasPatch ? programKey + "_fbpatch" : programKey;
             if (OperatingSystem.IsMacOS())
-                key += "_mac410_v6";
+                key += shaderModel == null ? "_mac410_v7" : $"_mac410_v7_{StorageBlock.MacStorageSize}";
 
             string vertPath = Path.Combine(CacheDir, $"{programKey}.vert");
             string fragPath = Path.Combine(CacheDir, $"{fragHash}.frag");

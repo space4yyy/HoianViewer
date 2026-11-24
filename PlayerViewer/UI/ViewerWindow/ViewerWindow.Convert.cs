@@ -8,6 +8,7 @@ using PlayerViewer.Core;
 using PlayerViewer.Core.Formats;
 using PlayerViewer.Phive;
 using PlayerViewer.Player;
+using PlayerViewer.Shaders;
 using PlayerViewer.Textures;
 using Vector2 = System.Numerics.Vector2;
 
@@ -18,7 +19,6 @@ namespace PlayerViewer.UI
     {
         string _convertNotice;
         string _convertClash;
-        Romfs _otherRomfs;
 
         /// <summary>
         /// Opens a model of the other game converted to this one. Nothing of either game is looked
@@ -94,18 +94,11 @@ namespace PlayerViewer.UI
         Romfs OtherRomfs()
         {
             var game = _config.CurrentGame == GameKind.Spiral ? GameKind.Thunder : GameKind.Spiral;
-            string root = _config.Of(game).RomfsPath;
+            var settings = _config.Of(game);
+            string root = settings.RomfsPath;
             if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
                 return null;
-            if (_otherRomfs?.Root != root)
-                _otherRomfs = new Romfs(
-                    root,
-                    _config.Of(game).LayeredFsPath,
-                    _config.Of(game).UseLayeredFs,
-                    null,
-                    game
-                );
-            return _otherRomfs;
+            return new Romfs(root, settings.LayeredFsPath, settings.UseLayeredFs, null, game);
         }
 
         static string ModelStem(string file)
@@ -144,9 +137,6 @@ namespace PlayerViewer.UI
         string ConvertedSuggestName() =>
             _standalone?.Converted is { } m ? m.FileName + ".zs" : null;
 
-        //Texture files a Raiders save could not find to copy, reported once the save is written.
-        int _saveMissingTextures;
-
         /// <summary>The files a Raiders model needs beside it: the animation file, and the
         /// texture files by stem, which go under <c>Tex</c> of the romfs root.</summary>
         sealed class SpiralCompanions
@@ -157,26 +147,56 @@ namespace PlayerViewer.UI
             public string Suffix;
         }
 
-        /// <summary>
-        /// Names a converted model, or any Raiders model, after the file it is saved as, before
-        /// the save. Returns the files a Raiders model needs beside it, written once the model is.
-        /// </summary>
-        SpiralCompanions PrepareConvertedSave(string path)
+        /// <summary>Prepares the output name and companion files for one save.</summary>
+        (Action WriteCompanions, Action Restore) PrepareConvertedSave(string path, BundleSaveReport report)
         {
-            _saveMissingTextures = 0;
             var m = _standalone?.Converted;
             var res = _standalone?.Bfres?.ResFile;
             if (res == null || (m == null && _romfs?.Game != GameKind.Spiral))
-                return null;
+                return default;
             string stem = ModelStem(path);
+            string originalName = res.Name;
             if (m?.Game == GameKind.Thunder)
             {
                 res.Name = stem;
-                return null;
+                return (null, () => res.Name = originalName);
             }
 
-            //A Raiders model's own files come from beside it or the romfs, under the names it had
-            //when opened, which an earlier save has renamed in memory.
+            string tableName = ExternalTextures.TableName;
+            bool hadTable = res.ExternalFiles.ContainsKey(tableName);
+            var originalTable = hadTable ? res.ExternalFiles[tableName].Data : null;
+            void Restore()
+            {
+                res.Name = originalName;
+                if (hadTable)
+                    res.ExternalFiles[tableName].Data = originalTable;
+                else if (res.ExternalFiles.ContainsKey(tableName))
+                    res.ExternalFiles.RemoveKey(tableName);
+            }
+
+            try
+            {
+                var (archive, model) = ModelConvert.SplitName(stem);
+                var companions = PrepareSpiralCompanions(path, res, m, archive, report);
+                res.Name = $"{archive}.{model}";
+                return (() => WriteSpiralCompanions(companions, report), Restore);
+            }
+            catch
+            {
+                Restore();
+                throw;
+            }
+        }
+
+        SpiralCompanions PrepareSpiralCompanions(
+            string path,
+            BfresLibrary.ResFile res,
+            ConvertedModel m,
+            string archive,
+            BundleSaveReport report
+        )
+        {
+            //Read companion files from the source model or its romfs.
             var edits = Textures?.External;
             Func<string, byte[]> read =
                 m != null ? m.ReadFile : ModelConvert.SourceFiles(_standalone.SourcePath, _romfs);
@@ -188,8 +208,9 @@ namespace PlayerViewer.UI
                     ? read($"Model/{oldArchive}.anim.bfres")
                 : null;
 
-            var (archive, model) = ModelConvert.SplitName(stem);
-            res.Name = $"{archive}.{model}";
+            if (animFile == null && res.ExternalFiles.ContainsKey(ModelConvert.AttachFlagName))
+                throw new FileNotFoundException($"The companion animation file {oldArchive}.anim.bfres was not found.");
+
             var companions = new SpiralCompanions
             {
                 Root = ModelConvert.SpiralRootFor(path),
@@ -202,6 +223,7 @@ namespace PlayerViewer.UI
             var missing = ModelConvert.RetableSpiral(
                 res,
                 anims,
+                oldArchive,
                 archive,
                 read,
                 edits,
@@ -222,57 +244,31 @@ namespace PlayerViewer.UI
                     )
                 );
             }
-            _saveMissingTextures = missing.Count;
+            if (missing.Count > 0)
+                report.Problems.Add($"{missing.Count} texture file(s) not found, so not written");
             return companions;
         }
 
-        void FinishConvertedSave(SpiralCompanions companions)
+        static void WriteSpiralCompanions(SpiralCompanions companions, BundleSaveReport report)
         {
-            if (companions == null || _saveReport == null || !_saveReport.Ok)
-                return;
-            //The save may have generated placeholder textures, listed but not yet collected.
-            ModelConvert.AddEditedFiles(
-                _standalone.Bfres.ResFile,
-                Textures?.External,
-                companions.Textures
-            );
             var files = companions.Files.ToList();
             foreach (var (stem, data) in companions.Textures)
                 files.Add(
                     (
-                        Path.Combine(
-                            companions.Root,
-                            ExternalTextures.PathOf(stem) + companions.Suffix
-                        ),
+                        Path.Combine(companions.Root, ExternalTextures.PathOf(stem) + companions.Suffix),
                         data
                     )
                 );
-            if (_saveMissingTextures > 0)
-                _saveReport.Problems.Add(
-                    $"{_saveMissingTextures} texture file(s) not found, so not written"
-                );
-            try
+            foreach (var (path, data) in files)
             {
-                foreach (var (path, data) in files)
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(path));
-                    AtomicFile.Write(
-                        path,
-                        data,
-                        path.EndsWith(".zs", StringComparison.OrdinalIgnoreCase)
-                    );
-                }
-                int textures = files.Count(f => f.Path.Contains(".bntx"));
-                _saveReport.Notes.Add(
-                    $"{textures} texture file(s)"
-                        + (files.Count > textures ? " and the animation file" : "")
-                        + " written beside it"
-                );
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                AtomicFile.Write(path, data, companions.Suffix.Length != 0);
             }
-            catch (Exception ex)
-            {
-                _saveReport.Problems.Add("Companion files not written: " + ex.Message);
-            }
+            report.Notes.Add(
+                $"{companions.Textures.Count} texture file(s)"
+                    + (companions.Files.Count > 0 ? " and the animation file" : "")
+                    + " written beside it"
+            );
         }
 
         //--- Raiders save: a romfs folder and the archive and model names, laid out as the game's.

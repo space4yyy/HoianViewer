@@ -12,7 +12,10 @@ namespace GLFrameworkEngine
         byte[] _uploaded;
         byte[] _macPadded;
         static readonly Lazy<int> MacBindings = new Lazy<int>(() => GL.GetInteger(GetPName.MaxUniformBufferBindings));
-        const int MacStorageSize = 65536;
+        static readonly Lazy<int> MacBlockSize = new Lazy<int>(() =>
+            Math.Min(65536, GL.GetInteger(GetPName.MaxUniformBlockSize)) & ~15);
+
+        public static int MacStorageSize => MacBlockSize.Value;
 
         static readonly Dictionary<(int, string), int> _blockIndexCache = new Dictionary<(int, string), int>();
         static readonly Dictionary<(int, int), int> _bindingCache = new Dictionary<(int, int), int>();
@@ -40,7 +43,7 @@ namespace GLFrameworkEngine
             if (OperatingSystem.IsMacOS())
             {
                 if (data.Length > MacStorageSize)
-                    throw new NotSupportedException("This storage table exceeds macOS's emulated 64 KiB limit.");
+                    throw new NotSupportedException($"This storage table exceeds the macOS uniform block limit of {MacStorageSize} bytes.");
                 _macPadded ??= new byte[MacStorageSize];
                 Array.Clear(_macPadded);
                 data.CopyTo(_macPadded, 0);

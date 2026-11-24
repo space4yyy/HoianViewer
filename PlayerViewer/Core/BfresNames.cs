@@ -57,19 +57,33 @@ namespace PlayerViewer.Core
             if (old == name)
                 return;
             var shape = model.Shapes[old];
+            bool otherShape = false;
+            bool otherBone = false;
+            foreach (var other in res.Models.Values)
+            {
+                if (ReferenceEquals(other, model))
+                    continue;
+                otherShape |= other.Shapes.ContainsKey(old);
+                otherBone |= other.Skeleton?.Bones.ContainsKey(old) == true;
+            }
             model.Shapes.Rename(old, name);
             shape.Name = name;
             foreach (var anim in res.ShapeAnims.Values)
-            foreach (var target in anim.VertexShapeAnims ?? Array.Empty<VertexShapeAnim>())
-                if (target.Name == old)
-                    target.Name = name;
+                if (TargetsModel(anim.BindModel, !otherShape))
+                    foreach (var target in anim.VertexShapeAnims ?? Array.Empty<VertexShapeAnim>())
+                        if (target.Name == old)
+                            target.Name = name;
             if (model.Skeleton?.Bones.ContainsKey(old) == true)
                 return;
             foreach (var anim in res.BoneVisibilityAnims.Values)
-                if (anim.Names != null)
+                if (anim.Names != null && TargetsModel(anim.BindModel, !otherShape && !otherBone))
                     for (int i = 0; i < anim.Names.Count; i++)
                         if (anim.Names[i] == old)
                             anim.Names[i] = name;
+
+            bool TargetsModel(Model bound, bool unambiguous) =>
+                ReferenceEquals(bound, model)
+                || (string.IsNullOrEmpty(bound?.Name) ? unambiguous : bound.Name == model.Name);
         }
 
         /// <summary>The file's bytes with one model renamed; the bytes as they were when it has no such model.</summary>

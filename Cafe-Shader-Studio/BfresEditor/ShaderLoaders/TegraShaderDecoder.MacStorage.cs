@@ -17,7 +17,8 @@ namespace BfresEditor
                 {
                     string name = match.Groups[1].Value;
                     instances.Add(name);
-                    return $"layout (std140) uniform _{name} {{ uvec4 words[4096]; }} {name};\n"
+                    int vectors = GLFrameworkEngine.StorageBlock.MacStorageSize / 16;
+                    return $"layout (std140) uniform _{name} {{ uvec4 words[{vectors}]; }} {name};\n"
                         + $"uint pv_read_{name}(int index) {{ return {name}.words[index >> 2][index & 3]; }}";
                 });
             foreach (string instance in instances)

@@ -253,6 +253,8 @@ namespace PlayerViewer.UI
             string _anim;
             float _frame;
             bool _paused;
+            GearEntry _glove;
+            GearEntry[] _gadgets;
             readonly Dictionary<GearSlot, (string RowId, int Variation, string CustomPath)> _gear =
                 new();
 
@@ -283,6 +285,11 @@ namespace PlayerViewer.UI
                 Add(GearSlot.Shoes, scene.CurrentShoes);
                 Add(GearSlot.Tank, scene.CurrentTank);
                 Add(GearSlot.MainWeapon, scene.CurrentWeapon);
+                if (scene.Romfs.Game == GameKind.Spiral)
+                {
+                    s._glove = scene.CurrentGlove;
+                    s._gadgets = (GearEntry[])scene.CurrentGadgets.Clone();
+                }
                 return s;
             }
 
@@ -312,6 +319,15 @@ namespace PlayerViewer.UI
                     if (entry != null)
                         scene.SetGear(slot, entry);
                 }
+                if (_gadgets != null)
+                {
+                    scene.SetGlove(RestoreGear(db.Glove, _glove));
+                    foreach (var slot in Enum.GetValues<GadgetSlot>())
+                    {
+                        var list = slot == GadgetSlot.Special ? db.Special : db.Gadget;
+                        scene.SetGadget(slot, RestoreGear(list, _gadgets[(int)slot]));
+                    }
+                }
                 scene.ApplyEyeColor(_eye);
                 scene.Freckles = _freckles;
                 scene.ApplySkinTone(_skin);
@@ -322,6 +338,9 @@ namespace PlayerViewer.UI
                 }
                 scene.AnimPaused = _paused;
             }
+
+            static GearEntry RestoreGear(List<GearEntry> list, GearEntry entry) =>
+                entry == null || entry.IsCustom ? entry : FindGear(list, entry.RowId, entry.Variation);
         }
 
         protected override void OnResize(EventArgs e)
@@ -539,15 +558,6 @@ namespace PlayerViewer.UI
                 _lastFrameTime = now;
                 RenderFrame((float)dt);
             }
-            catch (NotSupportedException ex) when (OperatingSystem.IsMacOS() && !ExportBusy)
-            {
-                //A rejected model shader must return to setup, rather than be
-                //drawn with an invalid program and crash in the native driver.
-                Console.WriteLine($"[UI] Unsupported renderer feature: {ex}");
-                _needsLoad = false;
-                _romfsError = ex.Message;
-                ShowRomfsSetup();
-            }
             finally
             {
                 _inFrame = false;
@@ -665,6 +675,15 @@ namespace PlayerViewer.UI
 
             SwapBuffers();
             TestHookFrameSwapped();
+
+            if (_viewportRendererError is { } rendererError)
+            {
+                _viewportRendererError = null;
+                Console.WriteLine($"[UI] Unsupported renderer feature: {rendererError}");
+                _needsLoad = false;
+                _romfsError = rendererError.Message;
+                ShowRomfsSetup();
+            }
 
             //Frame-exact export: capture this frame synchronously, then advance the timeline.
             if (_animExporting)

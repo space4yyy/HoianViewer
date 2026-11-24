@@ -143,16 +143,19 @@ namespace PlayerViewer.UI
         {
             if (OperatingSystem.IsMacOS())
             {
-                string[] candidates = language == "KRko"
-                    ? new[] { "/System/Library/Fonts/AppleSDGothicNeo.ttc" }
-                    : new[]
-                    {
-                        "/System/Library/Fonts/Hiragino Sans GB.ttc",
-                        "/System/Library/Fonts/STHeiti Medium.ttc",
-                    };
-                foreach (string path in candidates)
+                string[] candidates = language switch
+                {
+                    "KRko" => new[] { "AppleSDGothicNeo.ttc", "Supplemental/AppleGothic.ttf" },
+                    "CNzh" => new[] { "Hiragino Sans GB.ttc" },
+                    "TWzh" => new[] { "STHeiti Medium.ttc", "STHeiti Light.ttc" },
+                    _ => new[] { "ヒラギノ角ゴシック W3.ttc", "ヒラギノ丸ゴ ProN W4.ttc" },
+                };
+                foreach (string name in candidates.Append("Supplemental/Arial Unicode.ttf"))
+                {
+                    string path = Path.Combine("/System/Library/Fonts", name);
                     if (File.Exists(path))
                         return new RomfsFonts.Face { Name = Path.GetFileName(path), Data = File.ReadAllBytes(path) };
+                }
             }
             if (!SystemFonts.TryGetValue(language ?? "", out var names))
                 names = SystemFonts[""];

@@ -192,16 +192,15 @@ namespace PlayerViewer.UI
                 meta.Note = "physics metadata not written: " + ex.Message;
                 Console.WriteLine($"[Meta] {ex}");
             }
-            var companions = PrepareConvertedSave(path);
             _saveReportTime = DateTime.Now;
             _saveReport = ModelBundle.Save(
                 _standalone.Bfres,
                 path,
                 SavingWithSplicer() ? _uber : null,
                 SavingWithSplicer() ? GetVariations : ExistenceVariations,
-                Textures
+                Textures,
+                report => PrepareConvertedSave(path, report)
             );
-            FinishConvertedSave(companions);
             _saveProblemsOpen = _saveReport.VerifyFailed > 0 || !_saveReport.Ok;
             if (!_saveReport.Ok)
                 meta.Undo?.Invoke();

@@ -80,7 +80,8 @@ namespace PlayerViewer.Shaders
             string outPath,
             UberContext uber,
             Func<FMAT, MaterialVariations> variationsOf,
-            TextureStore textures
+            TextureStore textures,
+            Func<BundleSaveReport, (Action WriteCompanions, Action Restore)> prepare = null
         )
         {
             var report = new BundleSaveReport { Path = outPath };
@@ -133,14 +134,22 @@ namespace PlayerViewer.Shaders
                 undo.Add(SyncGeneratedTextures(bfres, textures, report));
 
                 bool compress = outPath.EndsWith(".zs", StringComparison.OrdinalIgnoreCase);
-                var restore = uber == null ? null : WriteDrawn(bfres);
+                var (writeCompanions, restoreOutputNames) = prepare?.Invoke(report) ?? default;
                 try
                 {
-                    report.FileBytes = Write(bfres, outPath, compress);
+                    var restoreDrawn = uber == null ? null : WriteDrawn(bfres);
+                    try
+                    {
+                        report.FileBytes = Write(bfres, outPath, compress, writeCompanions);
+                    }
+                    finally
+                    {
+                        restoreDrawn?.Invoke();
+                    }
                 }
                 finally
                 {
-                    restore?.Invoke();
+                    restoreOutputNames?.Invoke();
                 }
 
                 Verify(outPath, build, plans, carried, uber, report);
@@ -806,7 +815,7 @@ namespace PlayerViewer.Shaders
 
         //Written beside the target and swapped in, so a failed write cannot truncate the file
         //that was opened.
-        static long Write(BFRES bfres, string outPath, bool compress)
+        static long Write(BFRES bfres, string outPath, bool compress, Action writeCompanions)
         {
             byte[] data;
             using (var ms = new MemoryStream())
@@ -827,6 +836,7 @@ namespace PlayerViewer.Shaders
             string dir = System.IO.Path.GetDirectoryName(outPath);
             if (!string.IsNullOrEmpty(dir))
                 Directory.CreateDirectory(dir);
+            writeCompanions?.Invoke();
             AtomicFile.Write(outPath, data);
             return data.LongLength;
         }

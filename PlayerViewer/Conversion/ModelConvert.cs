@@ -350,6 +350,7 @@ namespace PlayerViewer.Conversion
         public static HashSet<string> RetableSpiral(
             ResFile res,
             ResFile anims,
+            string sourceArchive,
             string archive,
             Func<string, byte[]> read,
             ExternalTextureEdits edits,
@@ -357,7 +358,10 @@ namespace PlayerViewer.Conversion
         )
         {
             var missing = new HashSet<string>(StringComparer.Ordinal);
-            Dictionary<string, string> Retable(Dictionary<string, string> table)
+            Dictionary<string, string> Retable(
+                Dictionary<string, string> table,
+                Dictionary<string, string> explicitStems
+            )
             {
                 var renamed = new Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (var (name, oldStem) in table)
@@ -365,7 +369,6 @@ namespace PlayerViewer.Conversion
                     if (edits?.Removed(name) == true)
                         continue;
                     string stem = $"{archive}.{name}";
-                    renamed[name] = stem;
                     string source = edits?.SourceStem(name, oldStem) ?? oldStem;
                     var bytes =
                         edits?.File(name, stem)
@@ -375,45 +378,36 @@ namespace PlayerViewer.Conversion
                                 : null
                         );
                     if (bytes != null)
+                    {
                         files[stem] = bytes;
-                    else
+                        renamed[name] = stem;
+                    }
+                    else if (explicitStems?.ContainsKey(name) == true)
+                    {
+                        renamed[name] = stem;
                         missing.Add(name);
+                    }
                 }
                 return renamed;
             }
 
-            var own = ExternalTextures.ReadTable(res) is { } table ? Retable(table) : null;
+            var table = ExternalTextures.ReadTable(res);
+            var own = Retable(ExternalTextures.Stems(res, sourceArchive), table);
             var animTable =
-                anims != null && ExternalTextures.ReadTable(anims) is { } at ? Retable(at) : null;
+                anims != null && ExternalTextures.ReadTable(anims) is { } at ? Retable(at, at) : null;
             foreach (var name in edits?.Live ?? Enumerable.Empty<string>())
             {
-                if ((own?.ContainsKey(name) ?? false) || (animTable?.ContainsKey(name) ?? false))
+                if (own.ContainsKey(name) || animTable?.ContainsKey(name) == true)
                     continue;
-                own ??= new Dictionary<string, string>(StringComparer.Ordinal);
                 string stem = $"{archive}.{name}";
                 own[name] = stem;
                 files[stem] = edits.File(name, stem);
             }
-            if (own != null)
+            if (table != null || own.Count != 0)
                 ExternalTextures.WriteTable(res, own);
             if (animTable != null)
                 ExternalTextures.WriteTable(anims, animTable);
             return missing;
-        }
-
-        /// <summary>Adds the file of every edited texture the model's table lists that
-        /// <paramref name="files"/> lacks, which is a texture the save itself generated.</summary>
-        public static void AddEditedFiles(
-            ResFile res,
-            ExternalTextureEdits edits,
-            Dictionary<string, byte[]> files
-        )
-        {
-            if (edits == null)
-                return;
-            foreach (var (name, stem) in ExternalTextures.ReadTable(res) ?? new())
-                if (!files.ContainsKey(stem) && edits.Edited(name))
-                    files[stem] = edits.File(name, stem);
         }
 
         static Dictionary<string, object> Table(IEnumerable<KeyValuePair<string, string>> stems) =>
