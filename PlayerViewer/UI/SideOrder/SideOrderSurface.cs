@@ -208,7 +208,8 @@ namespace PlayerViewer.UI
         {
             if (!SideOrderAssets.Ready || max.X - min.X < 1 || max.Y - min.Y < 1)
                 return;
-            radius = Math.Max(0, Math.Min(radius, Math.Min(max.X - min.X, max.Y - min.Y) / 2));
+            //Match ImGui's rounded fill, including its one-point inset at the radius limit.
+            radius = Math.Max(0, Math.Min(radius, Math.Min(max.X - min.X, max.Y - min.Y) / 2 - 1));
             float restLevel = Math.Clamp(colour.W * rest * ImGui.GetStyle().Alpha, 0, 1);
             var code = new Vector2(MathF.Round(radius * 4), MathF.Round(restLevel * 255)) * 4;
             dl.AddImage(

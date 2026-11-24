@@ -338,9 +338,10 @@ namespace PlayerViewer.UI
             c[(int)ImGuiCol.Separator] = line;
             c[(int)ImGuiCol.SeparatorHovered] = fill;
             c[(int)ImGuiCol.SeparatorActive] = fill;
-            c[(int)ImGuiCol.ResizeGrip] = WithAlpha(dim, 0.4f);
-            c[(int)ImGuiCol.ResizeGripHovered] = fill;
-            c[(int)ImGuiCol.ResizeGripActive] = fill;
+            //Keep the resize hit target without drawing a triangle over the rounded corner.
+            c[(int)ImGuiCol.ResizeGrip] = Vector4.Zero;
+            c[(int)ImGuiCol.ResizeGripHovered] = Vector4.Zero;
+            c[(int)ImGuiCol.ResizeGripActive] = Vector4.Zero;
             c[(int)ImGuiCol.Tab] = Mix(Panel, BgShown, 0.25f);
             c[(int)ImGuiCol.TabHovered] = frameHover;
             c[(int)ImGuiCol.TabActive] = frame;

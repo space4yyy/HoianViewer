@@ -4,12 +4,15 @@
 uniform float shadeLevel;
 in vec4 color;
 in vec2 texCoord;
+in vec2 logicalPosition;
 out vec4 outputColor;
 void main()
 {
     vec2 code = floor((texCoord + 1.0) * 0.25 + 0.125);
     vec2 p = texCoord - code * 4.0;
-    vec2 halfSize = 1.0 / abs(vec2(dFdx(texCoord.x), dFdy(texCoord.y)));
+    //ImGui's radius is in logical points. Derivatives step in framebuffer pixels.
+    vec2 pixelSize = abs(vec2(dFdx(logicalPosition.x), dFdy(logicalPosition.y)));
+    vec2 halfSize = pixelSize / abs(vec2(dFdx(texCoord.x), dFdy(texCoord.y)));
     float radius = min(code.x * 0.25, min(halfSize.x, halfSize.y));
     float rest = code.y / 255.0;
 
@@ -30,7 +33,7 @@ void main()
 
     //Both profiles averaged over the pixel's width along the normal, so the lines keep their
     //width round the corners.
-    float footprint = abs(n.x) + abs(n.y);
+    float footprint = dot(abs(n), pixelSize);
     float light = 0.0, dark = 0.0;
     for (int i = 0; i < 4; i++)
     {

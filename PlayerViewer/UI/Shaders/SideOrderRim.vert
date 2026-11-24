@@ -5,9 +5,11 @@ layout(location = 1) in vec2 in_texCoord;
 layout(location = 2) in vec4 in_color;
 out vec4 color;
 out vec2 texCoord;
+out vec2 logicalPosition;
 void main()
 {
     gl_Position = projection_matrix * vec4(in_position, 0, 1);
     color = in_color;
     texCoord = in_texCoord;
+    logicalPosition = in_position;
 }
